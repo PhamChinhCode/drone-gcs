@@ -323,11 +323,21 @@ class Emergency(Message):
     confirm_code: int
 
 
-@register(0x18, "<16sf", 20, 2, True)
+# Bảng mã tham số dùng chung (ĐỀ XUẤT): tên khóa safety.yaml dài hơn 16 ký tự nên trên dây dùng mã số.
+PARAM_IDS = {
+    1: "low_battery_pct", 2: "critical_battery_pct", 3: "link_lost_timeout_s", 4: "marker_search_timeout_s",
+    5: "max_retries", 6: "takeoff_alt_m", 7: "acceptance_radius_m",
+}
+PARAM_NAMES = {v: k for k, v in PARAM_IDS.items()}
+
+
+@register(0x18, "<HHf12s", 20, 2, True)
 @dataclass(slots=True)
 class ParamSet(Message):  # ĐỀ XUẤT layout
-    name: bytes
+    param_id: int
+    reserved: int
     value: float
+    reserved2: bytes = bytes(12)
 
 
 @register(0x19, "<HBBI", 8, 1, True)
@@ -540,14 +550,17 @@ EVENT_CATEGORIES = {0: "failsafe", 1: "command", 2: "link", 3: "gripper", 4: "ma
 EVENT_CATEGORY_IDS = {v: k for k, v in EVENT_CATEGORIES.items()}
 
 
-@register(0x46, "<16sf", 20, 1, False)
+@register(0x46, "<HHf12s", 20, 1, False)
 @dataclass(slots=True)
 class ParamValue(Message):  # ĐỀ XUẤT layout
-    name: bytes
+    param_id: int
+    param_count: int
     value: float
+    reserved: bytes = bytes(12)
 
     def to_si(self) -> dict:
-        return {"name": self.name.rstrip(b"\0").decode("ascii", errors="replace"), "value": self.value}
+        return {"param_id": self.param_id, "name": PARAM_IDS.get(self.param_id), "count": self.param_count,
+                "value": self.value}
 
 
 @register(0x47, "<HHHHbBH", 12, 0, False)

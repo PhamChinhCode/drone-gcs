@@ -351,16 +351,18 @@ class FakeDrone:
             return R.OK
 
         if isinstance(msg, m.ParamSet):
-            name = msg.name.rstrip(b"\0").decode("ascii", errors="replace")
+            name = m.PARAM_IDS.get(msg.param_id)
             if name not in self.params:
                 return R.REJECT_INVALID_ARG
             self.params[name] = float(msg.value)
-            self.ep.enqueue_raw(1, self.ep.build(m.ParamValue(msg.name, msg.value), self.ep.next_seq()))
+            self.ep.enqueue_raw(1, self.ep.build(m.ParamValue(msg.param_id, len(self.params), msg.value),
+                                                 self.ep.next_seq()))
             return R.OK
         if isinstance(msg, m.Request):
             if msg.what == m.RequestWhat.PARAMS:
                 for k, v in self.params.items():
-                    self.ep.enqueue_raw(1, self.ep.build(m.ParamValue(k.encode()[:16], v), self.ep.next_seq()))
+                    self.ep.enqueue_raw(1, self.ep.build(m.ParamValue(m.PARAM_NAMES[k], len(self.params), v),
+                                                         self.ep.next_seq()))
             elif msg.what == m.RequestWhat.MISSION_STATE:
                 self.send_mission_state()
             return R.OK
