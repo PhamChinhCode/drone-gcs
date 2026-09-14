@@ -252,7 +252,7 @@ export function SiteDesignPage() {
       c.width = size.w * 2; c.height = size.h * 2;
       const ctx = c.getContext("2d")!;
       ctx.scale(2, 2);
-      ctx.fillStyle = "#0f172a"; ctx.fillRect(0, 0, size.w, size.h);
+      ctx.fillStyle = "#f4f7ef"; ctx.fillRect(0, 0, size.w, size.h);
       ctx.drawImage(img, 0, 0);
       const a = document.createElement("a");
       a.download = `so_do_${draft.site.name}.png`;
@@ -334,11 +334,11 @@ export function SiteDesignPage() {
               <line x1="0" y1="0" x2="0" y2="8" stroke="#ef4444" strokeWidth="3" />
             </pattern>
           </defs>
-          <rect width={size.w} height={size.h} fill="#0f172a" />
+          <rect width={size.w} height={size.h} fill="#f4f7ef" />
           {layers.bg && (bgDataUrl || bgUrl) && (
             <g transform={`translate(${size.w / 2 - e0 * scale} ${size.h / 2 + n0 * scale}) scale(${scale}) matrix(${bgM[0]} ${bgM[1]} ${-bgM[1]} ${bgM[0]} ${bgM[2]} ${bgM[3]})`}>
               <image href={bgDataUrl ?? bgUrl!} opacity={0.55} onLoad={(ev) => setImgW((ev.target as SVGImageElement).getBBox().width || 1000)} />
-              {draft.site.bg_anchors?.map((a, i) => <circle key={i} cx={a.px} cy={a.py} r={6 / scale / Math.hypot(bgM[0], bgM[1])} fill="#facc15" />)}
+              {draft.site.bg_anchors?.map((a, i) => <circle key={i} cx={a.px} cy={a.py} r={6 / scale / Math.hypot(bgM[0], bgM[1])} fill="#ca8a04" />)}
             </g>
           )}
           {grid}
@@ -393,7 +393,7 @@ export function SiteDesignPage() {
           })()}
           {cursor && <text x={8} y={size.h - 10} className="lbl">N {cursor[0].toFixed(2)} · E {cursor[1].toFixed(2)} m · 1 m = {scale.toFixed(1)} px</text>}
           {/* chỉ hướng Bắc */}
-          <g transform={`translate(${size.w - 30} 40)`}><polygon points="0,-18 7,6 0,0 -7,6" fill="#ef4444" /><text x={-4} y={22} className="lbl">N</text></g>
+          <g transform={`translate(${size.w - 30} 40)`}><polygon points="0,-18 7,6 0,0 -7,6" fill="#dc2626" /><text x={-4} y={22} className="lbl">N</text></g>
         </svg>
 
         {newTag && (

@@ -55,11 +55,13 @@ export function Scene(p: SceneProps) {
 
   return (
     <div className={`scene-wrap${p.failsafe ? " failsafe-border" : ""}`}>
-      <Canvas shadows="percentage" dpr={[1, 2]} frameloop={hidden ? "never" : "always"}
+      <Canvas flat shadows="percentage" dpr={[1, 2]} frameloop={hidden ? "never" : "always"}
         camera={{ position: [0, 50, 30], fov: 50, near: 0.05, far: 2000 }} gl={{ antialias: true }}>
-        <color attach="background" args={["#0b1220"]} />
-        <hemisphereLight args={["#dbeafe", "#1e293b", 0.6]} />
-        <directionalLight position={[30, 60, 20]} intensity={1.0} castShadow shadow-mapSize={[2048, 2048]}
+        {/* bầu trời xanh nhạt; sương mù cùng màu trời làm mặt đất xa hòa vào đường chân trời */}
+        <color attach="background" args={["#cfe3f6"]} />
+        <fog attach="fog" args={["#cfe3f6", 250, 1500]} />
+        <hemisphereLight args={["#ffffff", "#7d8f62", 0.9]} />
+        <directionalLight position={[30, 60, 20]} intensity={1.3} castShadow shadow-mapSize={[2048, 2048]}
           shadow-camera-left={-60} shadow-camera-right={60} shadow-camera-top={60} shadow-camera-bottom={-60} />
         <SampleDriver buffer={p.buffer} clock={p.clock} delayMs={p.delayMs} frame={frame} onWp={setSampleWp} />
         <Suspense fallback={null}>

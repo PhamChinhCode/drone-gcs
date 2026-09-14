@@ -5,28 +5,28 @@ import { Grid } from "@react-three/drei";
 import type { ThreeEvent } from "@react-three/fiber";
 import type { Area, Tag } from "../../../lib/types";
 import { deg, nedToThree } from "../coords";
-import { KIND_COLOR, labelTexture, stripeTexture } from "./labels";
+import { KIND_COLOR, KIND_TEXT, labelTexture, stripeTexture } from "./labels";
 
-export function GroundPlane({ size = 400 }: { size?: number }) {
+export function GroundPlane({ size = 4000 }: { size?: number }) {
   return (
     <group>
       <mesh rotation-x={-Math.PI / 2} receiveShadow position-y={-0.01}>
         <planeGeometry args={[size, size]} />
-        <meshStandardMaterial color="#1e293b" />
+        <meshStandardMaterial color="#9dbb78" roughness={1} />
       </mesh>
-      <Grid args={[size, size]} cellSize={1} sectionSize={10} cellColor="#334155" sectionColor="#475569"
-        fadeDistance={160} fadeStrength={1.5} infiniteGrid position-y={0.001} />
+      <Grid args={[size, size]} cellSize={1} sectionSize={10} cellColor="#8fa373" sectionColor="#5f7348"
+        fadeDistance={180} fadeStrength={1.5} infiniteGrid position-y={0.001} />
       {/* mũi tên Bắc tại gốc Home */}
       <mesh position={[0, 0.02, -3]} rotation-x={-Math.PI / 2}>
         <coneGeometry args={[0.35, 1, 3]} />
         <meshBasicMaterial color="#ef4444" />
       </mesh>
-      <Label text="N" position={nedToThree(4.2, 0, -0.1)} scale={0.9} color="#fca5a5" />
+      <Label text="N" position={nedToThree(4.2, 0, -0.1)} scale={0.9} color="#b91c1c" />
     </group>
   );
 }
 
-export function Label({ text, position, scale = 1, color = "#fff" }: { text: string; position: THREE.Vector3 | [number, number, number]; scale?: number; color?: string }) {
+export function Label({ text, position, scale = 1, color = "#0f172a" }: { text: string; position: THREE.Vector3 | [number, number, number]; scale?: number; color?: string }) {
   const tex = useMemo(() => labelTexture(text, color), [text, color]);
   const aspect = (tex.userData.aspect as number) ?? 2;
   const h = 0.032 * scale; // kích thước cố định trên màn hình — đọc được cả ở góc nhìn toàn khu vực
@@ -78,7 +78,7 @@ export function TagField({ tags, highlight, onTagClick }: { tags: Tag[]; highlig
       </instancedMesh>
       {visible.map((t) => (
         <group key={t.tag_id}>
-          <Label text={`${t.label} #${t.tag_id}`} position={nedToThree(t.pos_n_m, t.pos_e_m, t.pos_d_m - 1.1)} color={KIND_COLOR[t.kind]} />
+          <Label text={`${t.label} #${t.tag_id}`} position={nedToThree(t.pos_n_m, t.pos_e_m, t.pos_d_m - 1.1)} color={KIND_TEXT[t.kind]} />
           {t.kind === "home" && <HomePad tag={t} />}
         </group>
       ))}
@@ -91,7 +91,7 @@ export function HomePad({ tag }: { tag: Tag }) {
   return (
     <mesh position={[p.x, p.y + 0.015, p.z]} rotation-x={-Math.PI / 2}>
       <ringGeometry args={[Math.max(tag.landing_tol_m, 0.3), Math.max(tag.landing_tol_m, 0.3) + 0.12, 48]} />
-      <meshBasicMaterial color="#22c55e" transparent opacity={0.85} side={THREE.DoubleSide} />
+      <meshBasicMaterial color="#15803d" transparent opacity={0.9} side={THREE.DoubleSide} />
     </mesh>
   );
 }
@@ -119,9 +119,9 @@ export function OperatingArea({ area, alert }: { area: Area; alert: boolean }) {
   return (
     <group>
       <lineSegments geometry={geom}>
-        <lineBasicMaterial color={alert ? "#ef4444" : "#38bdf8"} transparent opacity={alert ? 0.95 : 0.45} />
+        <lineBasicMaterial color={alert ? "#dc2626" : "#0369a1"} transparent opacity={alert ? 0.95 : 0.7} />
       </lineSegments>
-      <Label text="Vùng bay — CẢNH BÁO, không cưỡng chế" position={nedToThree(top, c[1], -area.max_alt_m - 0.8)} scale={1.4} color={alert ? "#fca5a5" : "#7dd3fc"} />
+      <Label text="Vùng bay — CẢNH BÁO, không cưỡng chế" position={nedToThree(top, c[1], -area.max_alt_m - 0.8)} scale={1.4} color={alert ? "#b91c1c" : "#0369a1"} />
     </group>
   );
 }
@@ -143,9 +143,9 @@ export function NoFlyZone({ area }: { area: Area }) {
         <meshBasicMaterial map={tex} color="#ef4444" transparent opacity={0.28} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
       <lineSegments geometry={edges}>
-        <lineBasicMaterial color="#ef4444" />
+        <lineBasicMaterial color="#dc2626" />
       </lineSegments>
-      <Label text={`Cấm bay: ${area.name}`} position={nedToThree(c[0], c[1], -area.max_alt_m - 0.8)} scale={1.2} color="#fca5a5" />
+      <Label text={`Cấm bay: ${area.name}`} position={nedToThree(c[0], c[1], -area.max_alt_m - 0.8)} scale={1.2} color="#b91c1c" />
     </group>
   );
 }

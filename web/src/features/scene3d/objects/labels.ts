@@ -3,7 +3,7 @@ import * as THREE from "three";
 
 const cache = new Map<string, THREE.CanvasTexture>();
 
-export function labelTexture(text: string, color = "#ffffff", bg = "rgba(15,23,42,0.78)"): THREE.CanvasTexture {
+export function labelTexture(text: string, color = "#0f172a", bg = "rgba(255,255,255,0.9)"): THREE.CanvasTexture {
   const key = `${text}|${color}|${bg}`;
   const hit = cache.get(key);
   if (hit) return hit;
@@ -45,6 +45,11 @@ export function stripeTexture(color = "#ef4444"): THREE.CanvasTexture {
   cache.set(key, tex);
   return tex;
 }
+
+// màu chữ nhãn đậm hơn để đọc được trên nền sáng
+export const KIND_TEXT: Record<string, string> = {
+  home: "#15803d", pickup: "#1d4ed8", dropoff: "#b45309", waypoint: "#6d28d9",
+};
 
 export const KIND_COLOR: Record<string, string> = {
   home: "#22c55e", pickup: "#3b82f6", dropoff: "#f59e0b", waypoint: "#a78bfa",

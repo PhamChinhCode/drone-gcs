@@ -69,7 +69,7 @@ export function DroneGroup({ frame }: { frame: FrameRef }) {
       const sec = Math.floor(s.ageMs / 1000);
       if (s.stale && sec !== lastStaleSec.current) {
         lastStaleSec.current = sec;
-        const tex = labelTexture(`số liệu cũ ${sec} s`, "#fbbf24");
+        const tex = labelTexture(`số liệu cũ ${sec} s`, "#b45309");
         (staleLabel.current.material as THREE.SpriteMaterial).map = tex;
         staleLabel.current.scale.set((tex.userData.aspect as number) * 0.04, 0.04, 1);
         (staleLabel.current.material as THREE.SpriteMaterial).needsUpdate = true;
@@ -118,7 +118,7 @@ export function DroneGroup({ frame }: { frame: FrameRef }) {
           </group>
         ))}
         <lineSegments geometry={frustum}>
-          <lineBasicMaterial ref={collect} color="#22d3ee" transparent opacity={0.6} />
+          <lineBasicMaterial ref={collect} color="#0891b2" transparent opacity={0.6} />
         </lineSegments>
         <mesh ref={payload} position={[0, -0.17, 0]} castShadow visible={false}>
           <boxGeometry args={[0.18, 0.14, 0.18]} />
@@ -130,15 +130,15 @@ export function DroneGroup({ frame }: { frame: FrameRef }) {
         <bufferGeometry ref={altLine}>
           <bufferAttribute attach="attributes-position" args={[new Float32Array([0, 0, 0, 0, -1, 0]), 3]} />
         </bufferGeometry>
-        <lineDashedMaterial color="#94a3b8" transparent opacity={0.6} />
+        <lineDashedMaterial color="#475569" transparent opacity={0.6} />
       </line>
       <mesh ref={shadow} rotation-x={-Math.PI / 2}>
         <circleGeometry args={[0.35, 24]} />
-        <meshBasicMaterial color="#000" transparent opacity={0.35} depthWrite={false} />
+        <meshBasicMaterial color="#1f2a14" transparent opacity={0.3} depthWrite={false} />
       </mesh>
       {/* chấm định vị không phụ thuộc khoảng cách để thấy drone từ xa */}
       <sprite scale={[0.025, 0.025, 1]}>
-        <spriteMaterial color="#f8fafc" sizeAttenuation={false} depthTest={false} />
+        <spriteMaterial color="#0f172a" sizeAttenuation={false} depthTest={false} />
       </sprite>
       <sprite ref={staleLabel} position={[0, 0.9, 0]} visible={false} renderOrder={11}>
         <spriteMaterial depthTest={false} transparent sizeAttenuation={false} />
@@ -174,7 +174,7 @@ export function FlownTrail({ buffer, frame }: { buffer: TelemetryBuffer; frame: 
     for (let i = start; i <= end; i++, k++) {
       const p = buffer.samples[i].pos;
       pos.setXYZ(k, p.x, p.y, p.z);
-      col.setHSL(0.6 - Math.min(p.y / 15, 1) * 0.6, 0.9, 0.55);
+      col.setHSL(0.6 - Math.min(p.y / 15, 1) * 0.6, 0.9, 0.42);
       clr.setXYZ(k, col.r, col.g, col.b);
     }
     geom.setDrawRange(0, k);
@@ -195,9 +195,9 @@ export function PlannedPath({ wps, wpIndex, highlight }: { wps: Waypoint[]; wpIn
   const rest = pts.slice(Math.max(0, wpIndex));
   return (
     <group>
-      {passed.length >= 2 && <Line points={passed} color="#64748b" lineWidth={2} dashed dashSize={0.5} gapSize={0.35} />}
-      {rest.length >= 2 && <Line points={rest} color={highlight ? "#f472b6" : "#e2e8f0"} lineWidth={highlight ? 3.5 : 2.5} dashed dashSize={0.6} gapSize={0.4} />}
-      {cur && <Line points={cur} color="#facc15" lineWidth={4} />}
+      {passed.length >= 2 && <Line points={passed} color="#94a3b8" lineWidth={2} dashed dashSize={0.5} gapSize={0.35} />}
+      {rest.length >= 2 && <Line points={rest} color={highlight ? "#db2777" : "#1e293b"} lineWidth={highlight ? 3.5 : 2.5} dashed dashSize={0.6} gapSize={0.4} />}
+      {cur && <Line points={cur} color="#ea580c" lineWidth={4} />}
     </group>
   );
 }
@@ -215,7 +215,7 @@ export function WaypointMarkers({ wps, wpIndex }: { wps: Waypoint[]; wpIndex: nu
       {wps.map((w, i) => {
         const p = nedToThree(w.pos_n_m, w.pos_e_m, w.pos_d_m);
         const isCur = i === wpIndex;
-        const color = i < wpIndex ? "#64748b" : isCur ? "#facc15" : w.precision_land ? "#f472b6" : "#e2e8f0";
+        const color = i < wpIndex ? "#94a3b8" : isCur ? "#ea580c" : w.precision_land ? "#db2777" : "#1e293b";
         return (
           <group key={i} position={p}>
             <mesh ref={isCur ? active : undefined}>
@@ -245,11 +245,11 @@ export function LandingCone({ tag, frame }: { tag: Tag | null; frame: FrameRef }
       <mesh position-y={h / 2}>
         {/* đỉnh ở tag (bán kính dung sai), mở rộng theo độ cao */}
         <cylinderGeometry args={[h * 0.35, Math.max(tag.landing_tol_m, 0.2), h, 32, 1, true]} />
-        <meshBasicMaterial color="#f472b6" transparent opacity={0.12} side={THREE.DoubleSide} depthWrite={false} />
+        <meshBasicMaterial color="#db2777" transparent opacity={0.14} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
       <mesh rotation-x={-Math.PI / 2} position-y={0.03}>
         <ringGeometry args={[Math.max(tag.landing_tol_m, 0.2) - 0.03, Math.max(tag.landing_tol_m, 0.2), 48]} />
-        <meshBasicMaterial color="#f472b6" side={THREE.DoubleSide} />
+        <meshBasicMaterial color="#db2777" side={THREE.DoubleSide} />
       </mesh>
     </group>
   );
@@ -277,7 +277,7 @@ export function TagDetectRay({ detect, frame }: { detect: TagDetect | null; fram
     a.needsUpdate = true;
     geom.computeBoundingSphere();
     const locked = (s.flags & TF.TAG_LOCK) !== 0;
-    (line.material as THREE.LineBasicMaterial).color.set(locked ? new THREE.Color().setHSL((detect.quality / 100) * 0.33, 0.9, 0.5) : "#facc15");
+    (line.material as THREE.LineBasicMaterial).color.set(locked ? new THREE.Color().setHSL((detect.quality / 100) * 0.33, 0.9, 0.4) : "#ca8a04");
   });
   return <primitive object={line} />;
 }

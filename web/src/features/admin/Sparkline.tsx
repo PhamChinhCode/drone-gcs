@@ -1,4 +1,4 @@
-export function Sparkline({ values, label, unit, min, max, color = "#38bdf8" }: { values: (number | null)[]; label: string; unit: string; min?: number; max?: number; color?: string }) {
+export function Sparkline({ values, label, unit, min, max, color = "#0369a1" }: { values: (number | null)[]; label: string; unit: string; min?: number; max?: number; color?: string }) {
   const W = 360, H = 90, pad = 4;
   const nums = values.filter((v): v is number => v !== null);
   const lo = min ?? (nums.length ? Math.min(...nums) : 0);

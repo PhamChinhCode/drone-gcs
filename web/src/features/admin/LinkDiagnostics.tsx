@@ -33,8 +33,8 @@ export function LinkDiagnostics() {
         <h3>Chẩn đoán liên kết</h3>
         <div className="sparks">
           <Sparkline values={hist.map((h) => h.rssi)} label="RSSI dongle" unit="dBm" min={-100} max={-20} />
-          <Sparkline values={hist.map((h) => h.pdr)} label="PDR" unit="%" min={0} max={100} color="#22c55e" />
-          <Sparkline values={hist.map((h) => h.rtt)} label="RTT ACK" unit="ms" min={0} color="#f59e0b" />
+          <Sparkline values={hist.map((h) => h.pdr)} label="PDR" unit="%" min={0} max={100} color="#15803d" />
+          <Sparkline values={hist.map((h) => h.rtt)} label="RTT ACK" unit="ms" min={0} color="#d97706" />
         </div>
         <p className="muted small">Đồ thị 10 phút gần nhất (1 Hz). Lịch sử dài hơn: GET /api/link/history.</p>
         <table className="kv"><tbody>{kv.map(([k, v]) => <tr key={k}><th>{k}</th><td>{v}</td></tr>)}</tbody></table>
