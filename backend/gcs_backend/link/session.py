@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import itertools
 import logging
+import random
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
@@ -87,6 +88,8 @@ class LinkEndpoint:
         self._seen: dict[int, SeenSeq] = defaultdict(SeenSeq)
         self._replay: dict[int, ReplayWindow] = defaultdict(ReplayWindow)
         self._splitter = cobs.FrameSplitter()
+        self._peer_session: dict[int, int] = {}
+        self.session_id = random.randint(1, 0xFFFF)
         self.transport: Transport | None = None
         self.handlers: list[RxHandler] = []
         self.stats = {"tx_units": 0, "rx_units": 0, "crc_errors": 0, "auth_rejects": 0, "dup_rx": 0,
@@ -284,6 +287,18 @@ class LinkEndpoint:
     def on_rx_header(self, hdr: fr.Header) -> None:
         pass
 
+    def note_peer_session(self, src: int, session_id: int) -> bool:
+        """Heartbeat mang session_id sinh ngẫu nhiên mỗi lần khởi động. Đổi phiên → seq bên kia bắt đầu lại,
+        phải xóa bộ nhớ chống trùng/phát lại của nguồn đó; nếu không, lệnh mới trùng seq cũ sẽ được ACK mà
+        KHÔNG thực thi. (Tạm thời thay cho bắt tay sinh session_key — xem docs/DIEM_CAN_CHOT.md.)"""
+        if self._peer_session.get(src) == session_id:
+            return False
+        changed = src in self._peer_session
+        self._peer_session[src] = session_id
+        self._seen.pop(src, None)
+        self._replay.pop(src, None)
+        return changed
+
 
 # ───────────────────────────────── phía GCS ───────────────────────────────────────────────────
 
@@ -313,9 +328,9 @@ class LinkState:
 
 
 class LinkSession(LinkEndpoint):
-    def __init__(self, url: str, bus: EventBus, auth_key: bytes, session_id: int = 1) -> None:
+    def __init__(self, url: str, bus: EventBus, auth_key: bytes) -> None:
         super().__init__(src=fr.NODE_GCS, dst=fr.NODE_PI4, auth_key=auth_key)
-        self.url, self.bus, self.session_id = url, bus, session_id
+        self.url, self.bus = url, bus
         self.state = LinkState()
         self.map_crc_provider: Callable[[], int] = lambda: 0
         self._last_drone_seq: int | None = None
@@ -340,6 +355,7 @@ class LinkSession(LinkEndpoint):
                 log.info("liên kết mở: %s", self.url)
                 self.transport, self.state.transport_up = t, True
                 self._splitter = cobs.FrameSplitter()
+                self._send_heartbeat()  # heartbeat trước mọi lệnh: drone biết phiên mới trước khi nhận seq mới
                 try:
                     await self.rx_loop(t)
                 except Exception as e:
@@ -359,6 +375,9 @@ class LinkSession(LinkEndpoint):
         self.state.last_drone_rx = now
         if isinstance(msg, m.HeartbeatDrone):
             self.state.last_drone_hb = now
+            if self.note_peer_session(hdr.src, msg.session_id):
+                self._last_drone_seq = None
+                self.bus.emit("link.peer_restarted", session_id=msg.session_id)
             if self.state.drone_map_crc != msg.map_crc:
                 self.state.drone_map_crc = msg.map_crc
                 self.bus.emit("link.drone_map_crc", map_crc=msg.map_crc)
@@ -367,16 +386,28 @@ class LinkSession(LinkEndpoint):
         self.bus.emit("rx", msg=msg, header=hdr, t=now)
         return None
 
+    def _send_heartbeat(self) -> None:
+        t_ms = int((time.monotonic() - self._t0) * 1000) & 0xFFFFFFFF
+        msg = m.HeartbeatGcs(t_ms, self.map_crc_provider(), self.session_id)
+        self.enqueue_raw(msg.PRIORITY, self.build(msg, self.next_seq()))
+
     def on_rx_header(self, hdr: fr.Header) -> None:
         if hdr.src != fr.NODE_PI4:
             return
         self.state.last_dongle_rx = time.monotonic()  # dữ liệu không khí tới được nghĩa là dongle sống
-        if self._last_drone_seq is not None:
-            diff = (hdr.seq - self._last_drone_seq) & 0xFFFF
-            if 0 < diff < 1000:
-                self._win.expected += diff
-                self._win.received += 1
-        self._last_drone_seq = hdr.seq
+        if self._last_drone_seq is None:
+            self._last_drone_seq = hdr.seq
+            return
+        diff = (hdr.seq - self._last_drone_seq) & 0xFFFF
+        if 0 < diff < 1000:
+            self._win.expected += diff
+            self._win.received += 1
+            self._last_drone_seq = hdr.seq
+        elif diff > 0xFFFF - 1000:
+            # đến sau gói seq lớn hơn: hàng đợi ưu tiên phía drone đảo thứ tự — vẫn là gói nhận được
+            self._win.received += 1
+        elif diff >= 1000:
+            self._last_drone_seq = hdr.seq  # nhảy lớn (drone khởi động lại) → đặt lại mốc
 
     def on_dongle_unit(self, raw: bytes) -> None:
         try:
@@ -436,11 +467,10 @@ class LinkSession(LinkEndpoint):
         while True:
             await asyncio.sleep(1.0)
             if self._win.expected:
-                self.state.pdr_pct = round(100.0 * self._win.received / self._win.expected, 1)
+                self.state.pdr_pct = min(100.0, round(100.0 * self._win.received / self._win.expected, 1))
             self._win = _Window()
             if self.transport is not None:
-                t_ms = int((time.monotonic() - self._t0) * 1000) & 0xFFFFFFFF
-                await self.send(m.HeartbeatGcs(t_ms, self.map_crc_provider(), self.session_id))
+                self._send_heartbeat()
             st = self.status()
             if st["state"] != self._prev_link_state:
                 self.bus.emit("link.state_changed", old=self._prev_link_state, new=st["state"])

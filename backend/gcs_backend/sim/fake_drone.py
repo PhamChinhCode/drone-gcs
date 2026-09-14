@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import itertools
 import logging
 import math
 import random
@@ -156,6 +157,7 @@ class FakeDrone:
         self.paused = False
         self.activity: asyncio.Task | None = None
         self.tasks: list[asyncio.Task] = []
+        self._dongle_seq = itertools.count(1)
         # bản đồ tag
         self.tags: dict[int, tuple] = {}
         self.map_buf: dict[int, tuple] = {}
@@ -219,6 +221,7 @@ class FakeDrone:
             return rej
         if isinstance(msg, m.HeartbeatGcs):
             self.last_gcs_hb = time.monotonic()
+            self.ep.note_peer_session(hdr.src, msg.session_id)
             if self.link_lost_fired:
                 self.link_lost_fired = False
                 self.event(0, "link", 0, "liên kết GCS đã khôi phục")
@@ -605,7 +608,7 @@ class FakeDrone:
         ep, d = self.ep, self.ep.dongle
         rssi = -45 - random.randint(0, 8) - int(math.hypot(self.pos[0], self.pos[1]) * 0.2)
         loss = int(100 * d["tx_fail"] / d["tx_count"]) if d["tx_count"] else 0
-        await ep.send(m.HeartbeatDrone(self.t_ms(), self.map_crc, int(self.fsm), self.telem_flags(), 1))
+        await ep.send(m.HeartbeatDrone(self.t_ms(), self.map_crc, int(self.fsm), self.telem_flags(), self.ep.session_id))
         await ep.send(m.TelemSlow(self.t_ms(), int(14800 * (0.85 + 0.15 * self.battery / 100)),
                                   int(1200 if self.armed else 80), int((100 - self.battery) * 50) & 0xFFFF,
                                   self.mission_id, int(time.monotonic() - self.t0) & 0xFFFF, int(self.battery),
@@ -615,7 +618,8 @@ class FakeDrone:
                                  rssi, loss, 0))
         stat = m.DongleStat(d["tx_count"], d["tx_ok"], d["tx_fail"], d["rx_count"], rssi,
                             sum(len(q) for q in ep._txq), 0)
-        ep.enqueue_raw(0, fr.build(stat.MSG_ID, stat.pack(), ep.next_seq(), priority=0, need_ack=False,
+        # dongle thật có bộ đếm seq riêng — không được ăn vào seq của Pi 4 (làm sai PDR phía GCS)
+        ep.enqueue_raw(0, fr.build(stat.MSG_ID, stat.pack(), next(self._dongle_seq) & 0xFFFF, priority=0, need_ack=False,
                                    src=fr.NODE_ESP_GCS, dst=fr.NODE_GCS), chan=fr.CHAN_DONGLE)
 
 

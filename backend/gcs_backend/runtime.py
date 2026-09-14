@@ -61,7 +61,6 @@ class Runtime:
         self._last_wp_index = -1
         self._telem_buf: list[dict] = []
         self._last_store = 0.0
-        self._shadow_conflict_logged = False
         self._upload_lock = asyncio.Lock()
         self._tasks: list[asyncio.Task] = []
         self.link.map_crc_provider = lambda: self.gcs_map_crc
@@ -259,27 +258,30 @@ class Runtime:
 
     def _mission_lifecycle(self, si: dict) -> None:
         wire_id, fsm = si["mission_id"], si["fsm_state"]
-        if self.active_mission_id is None and wire_id:
-            # khôi phục sau khi GCS khởi động lại (N5): tìm nhiệm vụ ready/running khớp mã trên dây
+        if self.active_mission_id is None:
+            # khôi phục sau khi GCS khởi động lại (N5): shadow dựng lại từ MISSION_STATE, CSDL chỉ để đối chiếu
             for cand in self.db.list_missions(state="ready,running", limit=20):
-                if cand["id"] & 0xFFFF == wire_id:
+                if wire_id and cand["id"] & 0xFFFF == wire_id:
                     self.active_mission_id = cand["id"]
                     self.db.add_event(mission_id=cand["id"], severity=0, category="mission",
                                       message="khôi phục theo dõi nhiệm vụ từ MISSION_STATE sau khi GCS khởi động lại")
-                    break
+                elif cand["state"] == "running":
+                    self._finish(cand["id"], "failed", "failed",
+                                 f"sau khi nối lại, drone báo mission_id {wire_id} — không còn chạy nhiệm vụ này")
         mid = self.active_mission_id
         if mid is None:
             return
-        if wire_id != mid & 0xFFFF:
-            if not self._shadow_conflict_logged:  # shadow thắng kế hoạch cục bộ (6.2 quy tắc 2)
-                self._shadow_conflict_logged = True
-                self.db.add_event(mission_id=mid, severity=1, category="mission",
-                                  message=f"shadow báo mission_id {wire_id} khác nhiệm vụ GCS đang theo dõi "
-                                          f"({mid & 0xFFFF}) — lấy shadow làm chuẩn")
-            return
-        self._shadow_conflict_logged = False
         mission = self.db.get_mission(mid)
         if mission is None:
+            return
+        if wire_id != mid & 0xFFFF:
+            # Chỉ xét khi đã running: lúc vừa tải lên, MISSION_STATE cũ có thể đến sau ACK của END
+            # (hàng đợi ưu tiên phía drone đảo thứ tự).
+            if mission["state"] == "running":
+                # shadow thắng kế hoạch cục bộ (6.2 quy tắc 2): drone không còn giữ nhiệm vụ này
+                # (ví dụ Pi 4 khởi động lại giữa chừng) → nhiệm vụ coi như thất bại.
+                self._finish(mid, "failed", "failed",
+                             f"shadow báo drone đang giữ mission_id {wire_id}, không phải {mid & 0xFFFF}")
             return
         state = mission["state"]
         if state == "ready" and fsm not in (MS.IDLE, MS.MISSION_COMPLETE):
@@ -528,6 +530,9 @@ class Runtime:
             crc = await sync_tagmap(self.link, self.site_id, self.tags)
         except UploadError as e:
             raise ApiError(502, f"đồng bộ bản đồ lỗi ở {e.stage}: {e.reason}")
+        # ACK OK của TAGMAP_END = drone đã kiểm và giữ đúng crc này; không chờ heartbeat kế tiếp
+        self.link.state.drone_map_crc = crc
+        self._check_map()
         self.db.audit(user["id"], "tags.sync", str(self.site_id), {"map_crc": crc})
         self.db.add_event(mission_id=None, severity=0, category="marker",
                           message=f"đồng bộ bản đồ {len(self.tags)} tag xuống drone, crc {crc:08X}")

@@ -128,6 +128,33 @@ async def test_a4_emergency_under_telemetry_flood():
 
 
 @pytest.mark.asyncio
+async def test_gcs_restart_new_session_commands_still_execute():
+    """GCS khởi động lại (seq quay về 1) trong khi drone vẫn chạy: lệnh mới KHÔNG được bị coi là gói trùng."""
+    drone, server, sess, task, bus = await _setup()
+    executed: list[int] = []
+    drone.ep.handlers.insert(0, lambda msg, hdr: executed.append(msg.cmd_seq) if isinstance(msg, m.CmdSimple) else None)
+    try:
+        for i in range(5):
+            await sess.send(m.CmdSimple(100 + i, m.SimpleAction.HOLD))
+        task.cancel()
+        await asyncio.sleep(0.2)
+        port = server.sockets[0].getsockname()[1]
+        sess2 = LinkSession(f"tcp://127.0.0.1:{port}", EventBus(), KEY)
+        task = asyncio.create_task(sess2.run())
+        for _ in range(100):
+            if sess2.transport is not None:
+                break
+            await asyncio.sleep(0.02)
+        await asyncio.sleep(0.1)
+        for i in range(5):
+            ack = await sess2.send(m.CmdSimple(200 + i, m.SimpleAction.HOLD))
+            assert ack.result == m.AckResult.OK
+        assert executed == [100, 101, 102, 103, 104, 200, 201, 202, 203, 204]
+    finally:
+        await _teardown(drone, server, task)
+
+
+@pytest.mark.asyncio
 async def test_link_state_distinguishes_dongle_vs_drone():
     drone, server, sess, task, bus = await _setup()
     try:

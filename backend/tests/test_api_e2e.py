@@ -97,7 +97,7 @@ def test_full_mission_a_to_b_home(env):
 
     r = c.post("/api/tags/sync")
     assert r.status_code == 200, r.text
-    assert wait_for(lambda: c.get("/api/state").json()["map"]["in_sync"], 5)
+    assert c.get("/api/state").json()["map"]["in_sync"]  # ngay sau ACK TAGMAP_END, không chờ heartbeat
 
     r = c.post(f"/api/missions/{mission['id']}/upload")
     assert r.status_code == 200, r.text
