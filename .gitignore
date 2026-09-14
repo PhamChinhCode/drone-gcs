@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+
+# CSDL & dữ liệu chạy
+backend/*.db
+backend/*.db-journal
+backend/data_store/
+.env
+
+# Node
+node_modules/
+web/dist/
+
+# Khóa ESP-NOW (PMK/LMK) — KHÔNG đưa vào git (mục 4.3)
+*.key
+secrets/
+
+# IDE
+.vscode/
+.idea/
