@@ -56,7 +56,7 @@ export function Scene(p: SceneProps) {
   return (
     <div className={`scene-wrap${p.failsafe ? " failsafe-border" : ""}`}>
       <Canvas flat shadows="percentage" dpr={[1, 2]} frameloop={hidden ? "never" : "always"}
-        camera={{ position: [0, 50, 30], fov: 50, near: 0.05, far: 2000 }} gl={{ antialias: true }}>
+        camera={{ position: [0, 50, 30], fov: 50, near: 0.2, far: 2000 }} gl={{ antialias: true }}>
         {/* bầu trời xanh nhạt; sương mù cùng màu trời làm mặt đất xa hòa vào đường chân trời */}
         <color attach="background" args={["#cfe3f6"]} />
         <fog attach="fog" args={["#cfe3f6", 250, 1500]} />

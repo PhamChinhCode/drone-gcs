@@ -12,27 +12,61 @@ export function GroundPlane({ size = 4000 }: { size?: number }) {
     <group>
       <mesh rotation-x={-Math.PI / 2} receiveShadow position-y={-0.01}>
         <planeGeometry args={[size, size]} />
-        <meshStandardMaterial color="#9dbb78" roughness={1} />
+        {/* polygonOffset đẩy mặt đất ra sau trong depth buffer → lưới, tag, vòng Home không bị z-fighting (chập chờn) ở xa */}
+        <meshStandardMaterial color="#d3ecb5" roughness={1} polygonOffset polygonOffsetFactor={4} polygonOffsetUnits={4} />
       </mesh>
-      <Grid args={[size, size]} cellSize={1} sectionSize={10} cellColor="#8fa373" sectionColor="#5f7348"
-        fadeDistance={180} fadeStrength={1.5} infiniteGrid position-y={0.001} />
+      <Grid
+        args={[size, size]}
+        cellSize={1}
+        sectionSize={10}
+        cellColor="#8fa373"
+        sectionColor="#5f7348"
+        fadeDistance={180}
+        fadeStrength={1.5}
+        infiniteGrid
+        position-y={0.005}
+      />
       {/* mũi tên Bắc tại gốc Home */}
       <mesh position={[0, 0.02, -3]} rotation-x={-Math.PI / 2}>
         <coneGeometry args={[0.35, 1, 3]} />
         <meshBasicMaterial color="#ef4444" />
       </mesh>
-      <Label text="N" position={nedToThree(4.2, 0, -0.1)} scale={0.9} color="#b91c1c" />
+      <Label
+        text="N"
+        position={nedToThree(4.2, 0, -0.1)}
+        scale={0.9}
+        color="#b91c1c"
+      />
     </group>
   );
 }
 
-export function Label({ text, position, scale = 1, color = "#0f172a" }: { text: string; position: THREE.Vector3 | [number, number, number]; scale?: number; color?: string }) {
+export function Label({
+  text,
+  position,
+  scale = 1,
+  color = "#0f172a",
+}: {
+  text: string;
+  position: THREE.Vector3 | [number, number, number];
+  scale?: number;
+  color?: string;
+}) {
   const tex = useMemo(() => labelTexture(text, color), [text, color]);
   const aspect = (tex.userData.aspect as number) ?? 2;
   const h = 0.032 * scale; // kích thước cố định trên màn hình — đọc được cả ở góc nhìn toàn khu vực
   return (
-    <sprite position={position as never} scale={[h * aspect, h, 1]} renderOrder={10}>
-      <spriteMaterial map={tex} depthTest={false} transparent sizeAttenuation={false} />
+    <sprite
+      position={position as never}
+      scale={[h * aspect, h, 1]}
+      renderOrder={10}
+    >
+      <spriteMaterial
+        map={tex}
+        depthTest={false}
+        transparent
+        sizeAttenuation={false}
+      />
     </sprite>
   );
 }
@@ -43,7 +77,15 @@ const _s = new THREE.Vector3();
 const _p = new THREE.Vector3();
 const _c = new THREE.Color();
 
-export function TagField({ tags, highlight, onTagClick }: { tags: Tag[]; highlight?: Set<number>; onTagClick?: (t: Tag) => void }) {
+export function TagField({
+  tags,
+  highlight,
+  onTagClick,
+}: {
+  tags: Tag[];
+  highlight?: Set<number>;
+  onTagClick?: (t: Tag) => void;
+}) {
   const ref = useRef<THREE.InstancedMesh>(null);
   const visible = tags.filter((t) => t.enabled);
   useLayoutEffect(() => {
@@ -57,7 +99,10 @@ export function TagField({ tags, highlight, onTagClick }: { tags: Tag[]; highlig
       const s = Math.max(t.tag_size_m, 0.6);
       _s.set(s, s, 1);
       mesh.setMatrixAt(i, _m.compose(_p, _q, _s));
-      mesh.setColorAt(i, _c.set(highlight?.has(t.tag_id) ? "#f472b6" : KIND_COLOR[t.kind]));
+      mesh.setColorAt(
+        i,
+        _c.set(highlight?.has(t.tag_id) ? "#f472b6" : KIND_COLOR[t.kind]),
+      );
     });
     mesh.count = visible.length;
     mesh.instanceMatrix.needsUpdate = true;
@@ -66,19 +111,28 @@ export function TagField({ tags, highlight, onTagClick }: { tags: Tag[]; highlig
 
   const click = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
-    if (e.instanceId !== undefined && onTagClick) onTagClick(visible[e.instanceId]);
+    if (e.instanceId !== undefined && onTagClick)
+      onTagClick(visible[e.instanceId]);
   };
 
   return (
     <group>
       {/* 50 tag = 1 draw call (9.5) */}
-      <instancedMesh ref={ref} args={[undefined, undefined, Math.max(visible.length, 1)]} onClick={click}>
+      <instancedMesh
+        ref={ref}
+        args={[undefined, undefined, Math.max(visible.length, 1)]}
+        onClick={click}
+      >
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial side={THREE.DoubleSide} />
       </instancedMesh>
       {visible.map((t) => (
         <group key={t.tag_id}>
-          <Label text={`${t.label} #${t.tag_id}`} position={nedToThree(t.pos_n_m, t.pos_e_m, t.pos_d_m - 1.1)} color={KIND_TEXT[t.kind]} />
+          <Label
+            text={`${t.label} #${t.tag_id}`}
+            position={nedToThree(t.pos_n_m, t.pos_e_m, t.pos_d_m - 1.1)}
+            color={KIND_TEXT[t.kind]}
+          />
           {t.kind === "home" && <HomePad tag={t} />}
         </group>
       ))}
@@ -90,13 +144,28 @@ export function HomePad({ tag }: { tag: Tag }) {
   const p = nedToThree(tag.pos_n_m, tag.pos_e_m, tag.pos_d_m);
   return (
     <mesh position={[p.x, p.y + 0.015, p.z]} rotation-x={-Math.PI / 2}>
-      <ringGeometry args={[Math.max(tag.landing_tol_m, 0.3), Math.max(tag.landing_tol_m, 0.3) + 0.12, 48]} />
-      <meshBasicMaterial color="#15803d" transparent opacity={0.9} side={THREE.DoubleSide} />
+      <ringGeometry
+        args={[
+          Math.max(tag.landing_tol_m, 0.3),
+          Math.max(tag.landing_tol_m, 0.3) + 0.12,
+          48,
+        ]}
+      />
+      <meshBasicMaterial
+        color="#15803d"
+        transparent
+        opacity={0.9}
+        side={THREE.DoubleSide}
+      />
     </mesh>
   );
 }
 
-function prismEdges(verts: [number, number][], minAlt: number, maxAlt: number): Float32Array {
+function prismEdges(
+  verts: [number, number][],
+  minAlt: number,
+  maxAlt: number,
+): Float32Array {
   const pts: number[] = [];
   const n = verts.length;
   for (let i = 0; i < n; i++) {
@@ -111,17 +180,38 @@ function prismEdges(verts: [number, number][], minAlt: number, maxAlt: number): 
 export function OperatingArea({ area, alert }: { area: Area; alert: boolean }) {
   const geom = useMemo(() => {
     const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.BufferAttribute(prismEdges(area.vertices, 0.02, area.max_alt_m), 3));
+    g.setAttribute(
+      "position",
+      new THREE.BufferAttribute(
+        prismEdges(area.vertices, 0.02, area.max_alt_m),
+        3,
+      ),
+    );
     return g;
   }, [area]);
-  const c = area.vertices.reduce((acc, v) => [acc[0] + v[0] / area.vertices.length, acc[1] + v[1] / area.vertices.length], [0, 0]);
+  const c = area.vertices.reduce(
+    (acc, v) => [
+      acc[0] + v[0] / area.vertices.length,
+      acc[1] + v[1] / area.vertices.length,
+    ],
+    [0, 0],
+  );
   const top = Math.max(...area.vertices.map((v) => v[0]));
   return (
     <group>
       <lineSegments geometry={geom}>
-        <lineBasicMaterial color={alert ? "#dc2626" : "#0369a1"} transparent opacity={alert ? 0.95 : 0.7} />
+        <lineBasicMaterial
+          color={alert ? "#dc2626" : "#0369a1"}
+          transparent
+          opacity={alert ? 0.95 : 0.7}
+        />
       </lineSegments>
-      <Label text="Vùng bay — CẢNH BÁO, không cưỡng chế" position={nedToThree(top, c[1], -area.max_alt_m - 0.8)} scale={1.4} color={alert ? "#b91c1c" : "#0369a1"} />
+      <Label
+        text="Vùng bay — CẢNH BÁO, không cưỡng chế"
+        position={nedToThree(top, c[1], -area.max_alt_m - 0.8)}
+        scale={1.4}
+        color={alert ? "#b91c1c" : "#0369a1"}
+      />
     </group>
   );
 }
@@ -129,23 +219,51 @@ export function OperatingArea({ area, alert }: { area: Area; alert: boolean }) {
 export function NoFlyZone({ area }: { area: Area }) {
   const { mesh, edges } = useMemo(() => {
     // Shape trên mặt (x=e, y=n); ép đùn theo +Z rồi xoay −90° quanh X → cao theo +Y, n → −Z
-    const shape = new THREE.Shape(area.vertices.map(([n, e]) => new THREE.Vector2(e, n)));
-    const g = new THREE.ExtrudeGeometry(shape, { depth: Math.max(area.max_alt_m - area.min_alt_m, 0.1), bevelEnabled: false });
+    const shape = new THREE.Shape(
+      area.vertices.map(([n, e]) => new THREE.Vector2(e, n)),
+    );
+    const g = new THREE.ExtrudeGeometry(shape, {
+      depth: Math.max(area.max_alt_m - area.min_alt_m, 0.1),
+      bevelEnabled: false,
+    });
     g.rotateX(-Math.PI / 2);
     g.translate(0, area.min_alt_m, 0);
     return { mesh: g, edges: new THREE.EdgesGeometry(g) };
   }, [area]);
-  const tex = useMemo(() => { const t = stripeTexture().clone(); t.repeat.set(0.25, 0.25); t.needsUpdate = true; return t; }, []);
-  const c = area.vertices.reduce((acc, v) => [acc[0] + v[0] / area.vertices.length, acc[1] + v[1] / area.vertices.length], [0, 0]);
+  const tex = useMemo(() => {
+    const t = stripeTexture().clone();
+    t.repeat.set(0.25, 0.25);
+    t.needsUpdate = true;
+    return t;
+  }, []);
+  const c = area.vertices.reduce(
+    (acc, v) => [
+      acc[0] + v[0] / area.vertices.length,
+      acc[1] + v[1] / area.vertices.length,
+    ],
+    [0, 0],
+  );
   return (
     <group>
       <mesh geometry={mesh}>
-        <meshBasicMaterial map={tex} color="#ef4444" transparent opacity={0.28} side={THREE.DoubleSide} depthWrite={false} />
+        <meshBasicMaterial
+          map={tex}
+          color="#ef4444"
+          transparent
+          opacity={0.28}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
       </mesh>
       <lineSegments geometry={edges}>
         <lineBasicMaterial color="#dc2626" />
       </lineSegments>
-      <Label text={`Cấm bay: ${area.name}`} position={nedToThree(c[0], c[1], -area.max_alt_m - 0.8)} scale={1.2} color="#b91c1c" />
+      <Label
+        text={`Cấm bay: ${area.name}`}
+        position={nedToThree(c[0], c[1], -area.max_alt_m - 0.8)}
+        scale={1.2}
+        color="#b91c1c"
+      />
     </group>
   );
 }
