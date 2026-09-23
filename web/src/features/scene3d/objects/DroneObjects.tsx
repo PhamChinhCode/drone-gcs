@@ -1,11 +1,15 @@
-// DroneGroup, FlownTrail, PlannedPath, WaypointMarkers, LandingCone, TagDetectRay — mục 9.1, 9.2
+// DroneGroup, FlownTrail, PlannedPath, WaypointMarkers, LandingCone, RthHome.
+//
+// Không còn TagDetectRay: AprilTag thô không đi qua kênh 4G (giao ước 9.3) — GCS chỉ biết tag nào
+// đang được BÁM qua marker_id_tracking của DRONE_TELEMETRY 2 Hz.
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { Line } from "@react-three/drei";
-import type { Tag, TagDetect, Waypoint } from "../../../lib/types";
-import { FSM, TF } from "../../../lib/types";
-import { bodyFrdToThree, nedToThree } from "../coords";
+import type { Tag, Waypoint } from "../../../lib/types";
+import { FSM } from "../../../lib/types";
+import { useLive } from "../../../store/live";
+import { nedToThree } from "../coords";
 import type { InterpolatedSample, TelemetryBuffer } from "../useTelemetryBuffer";
 import { Label } from "./SiteObjects";
 import { labelTexture } from "./labels";
@@ -17,6 +21,12 @@ const CAM_FOV_DEG = 62;
 
 /** Mô hình drone dựng thủ tục (≈ 1k tam giác). Mũi = −Z, cánh phải = +X, nóc = +Y. */
 export function DroneGroup({ frame }: { frame: FrameRef }) {
+  const armed = useLive((st) => st.telem?.armed ?? null);
+  const carrying = useLive((st) => st.telem?.carrying ?? null);
+  const armedRef = useRef(armed);
+  const carryingRef = useRef(carrying);
+  armedRef.current = armed;
+  carryingRef.current = carrying;
   const group = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
   const props = useRef<THREE.Group[]>([]);
@@ -52,10 +62,10 @@ export function DroneGroup({ frame }: { frame: FrameRef }) {
     if (!s) return;
     g.position.copy(s.pos);
     body.current!.quaternion.copy(s.quat);
-    const armed = (s.flags & TF.ARMED) !== 0;
+    const armed = armedRef.current === true;  // null = mất đường FC: không quay cánh, cũng không khẳng định đã dừng
     props.current.forEach((p, i) => { if (armed && !s.stale) p.rotation.y += (i % 2 ? -1 : 1) * 30 * Math.PI * 2 * Math.min(dt, 0.05); });
     // payloadBox hiện/ẩn mờ dần 300 ms
-    const want = (s.flags & TF.CARRYING) !== 0 ? 1 : 0;
+    const want = carryingRef.current ? 1 : 0;
     payloadOpacity.current += Math.sign(want - payloadOpacity.current) * Math.min(Math.abs(want - payloadOpacity.current), dt / 0.3);
     if (payload.current) {
       payload.current.visible = payloadOpacity.current > 0.01;
@@ -256,28 +266,54 @@ export function LandingCone({ tag, frame }: { tag: Tag | null; frame: FrameRef }
 }
 
 /** Tia camera → tag đang khóa. Xanh lá khi khóa, vàng khi thấy chưa khóa; màu theo quality đỏ→xanh. */
-export function TagDetectRay({ detect, frame }: { detect: TagDetect | null; frame: FrameRef }) {
-  const geom = useMemo(() => {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3));
-    return g;
+export function AssumedDrone() {
+  /** Chỗ người vận hành ĐOÁN drone đang đậu, khi POS_VALID = 0 và GCS không có số đo nào.
+   *
+   *  Vẽ khác hẳn drone thật — vòng nét đứt nằm trên mặt đất, không có thân, không quay cánh — để
+   *  không ai nhìn lướt qua rồi tưởng đó là vị trí đo được. Biến mất ngay khi drone neo. */
+  const pos = useLive((st) => st.assumedPos);
+  const hasFix = useLive((st) => st.telem?.valid.pos ?? false);
+  const ring = useMemo(() => {
+    const pts: THREE.Vector3[] = [];
+    for (let i = 0; i <= 48; i++) {
+      const a = (i / 48) * Math.PI * 2;
+      pts.push(new THREE.Vector3(Math.cos(a) * 0.6, 0.02, Math.sin(a) * 0.6));
+    }
+    const g = new THREE.BufferGeometry().setFromPoints(pts);
+    const m = new THREE.LineDashedMaterial({ color: "#a16207", dashSize: 0.18, gapSize: 0.12 });
+    const line = new THREE.Line(g, m);
+    line.computeLineDistances();
+    return line;
   }, []);
-  const line = useMemo(() => new THREE.Line(geom, new THREE.LineBasicMaterial({ color: "#22c55e" })), [geom]);
-  const v = useMemo(() => new THREE.Vector3(), []);
-  useFrame(() => {
-    const s = frame.current;
-    // s.t và t_gcs cùng miền thời gian backend (mẫu dựng đã trừ RENDER_DELAY)
-    const show = !!s && !!detect && detect.t_gcs > s.t - 800 && !s.stale;
-    line.visible = show;
-    if (!show || !s || !detect) return;
-    bodyFrdToThree(detect.rel, s.quat, v);
-    const a = geom.getAttribute("position") as THREE.BufferAttribute;
-    a.setXYZ(0, s.pos.x, s.pos.y, s.pos.z);
-    a.setXYZ(1, s.pos.x + v.x, s.pos.y + v.y, s.pos.z + v.z);
-    a.needsUpdate = true;
-    geom.computeBoundingSphere();
-    const locked = (s.flags & TF.TAG_LOCK) !== 0;
-    (line.material as THREE.LineBasicMaterial).color.set(locked ? new THREE.Color().setHSL((detect.quality / 100) * 0.33, 0.9, 0.4) : "#ca8a04");
-  });
-  return <primitive object={line} />;
+  if (!pos || hasFix) return null;
+  const p = nedToThree(pos.n, pos.e, 0);
+  return (
+    <group position={p}>
+      <primitive object={ring} />
+      <mesh position={[0, 0.5, 0]}>
+        <octahedronGeometry args={[0.22]} />
+        <meshStandardMaterial color="#a16207" transparent opacity={0.45} />
+      </mesh>
+    </group>
+  );
+}
+
+export function RthHome() {
+  /** Nhà của RTH vẽ từ home_* của drone, KHÔNG suy ra từ pad_home: hai chỗ đó chỉ trùng khi drone
+   *  cất cánh đúng trên bãi đáp (giao ước 11.P18). HOME_VALID = 0 thì không vẽ gì. */
+  const home = useLive((st) => st.telem?.home_ne ?? null);
+  if (!home) return null;
+  const p = nedToThree(home[0], home[1], 0);
+  return (
+    <group position={p}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.55, 0.75, 32]} />
+        <meshBasicMaterial color="#2563eb" transparent opacity={0.85} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh position={[0, 0.35, 0]}>
+        <coneGeometry args={[0.28, 0.7, 4]} />
+        <meshStandardMaterial color="#2563eb" />
+      </mesh>
+    </group>
+  );
 }

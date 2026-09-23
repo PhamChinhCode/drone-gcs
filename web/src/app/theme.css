@@ -192,3 +192,13 @@ progress { width: 100%; }
   .split-right, .design-canvas, .replay-scene { min-height: 60vh; }
   .replay-side { grid-row: auto; grid-column: auto; }
 }
+
+/* ── tab Drone: checklist chuẩn bị bay ──────────────────────────────────────────────────── */
+.check-list th { font-weight: 600; white-space: nowrap; }
+.check-list td:first-child { width: 1.6rem; text-align: center; font-size: 1.1em; }
+.check-dot.ok { color: #15803d; }
+.check-dot.warn { color: #b45309; }
+.check-dot.bad { color: #b91c1c; }
+.check-dot.na { color: #9ca3af; }
+.drone-page .panel + .panel { margin-top: 0.75rem; }
+.drone-page .btn-row { align-items: center; gap: 0.75rem; }

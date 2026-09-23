@@ -18,7 +18,7 @@ export function Login() {
         } catch (ex) { setErr(errMsg(ex)); }
       }}>
         <h2>Trạm điều khiển mặt đất</h2>
-        <p className="muted small">ESP-NOW · giám sát 3D</p>
+        <p className="muted small">MAVLink 2 · giám sát 3D</p>
         <label>Tên đăng nhập<input autoFocus value={username} onChange={(e) => setU(e.target.value)} /></label>
         <label>Mật khẩu<input type="password" value={password} onChange={(e) => setP(e.target.value)} /></label>
         <button className="primary" type="submit">Đăng nhập</button>

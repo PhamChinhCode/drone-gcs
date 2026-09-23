@@ -1,4 +1,7 @@
-// Màn hình Vận hành 3D (mặc định, 8.2): cảnh 3D toàn màn hình, HUD góc trên trái, tag bên trái, panel bên phải.
+// Màn hình Vận hành 3D: cảnh 3D toàn màn hình, HUD góc trên trái, tag bên trái, panel bên phải.
+//
+// Không có bảng điều khiển tay: người lái dùng RC trực tiếp tới FC, kênh 4G có trễ và có thể mất
+// nên không bao giờ được dùng để lái (giao ước 9.3).
 import { useEffect, useState } from "react";
 import { get } from "../../lib/api";
 import { liveBuffer, liveClock } from "../../lib/ws";
@@ -8,15 +11,14 @@ import { useSite } from "../../store/site";
 import { Scene } from "../scene3d/Scene";
 import { KIND_COLOR } from "../scene3d/objects/labels";
 import { Hud } from "./Hud";
-import { ManualControl } from "./ManualControl";
 import { TelemetryPanel } from "./TelemetryPanel";
 
 export function OperationPage() {
   const { tags, areas } = useSite();
   const shadow = useLive((s) => s.shadow);
-  const tagDetect = useLive((s) => s.tagDetect);
+  const telem = useLive((s) => s.telem);
   const alerts = useLive((s) => s.alerts);
-  const fast = useLive((s) => s.fast);
+  void telem;
   const renderDelay = useLive((s) => s.renderDelayMs);
   const missionsVersion = useLive((s) => s.missionsVersion);
   const [panelOpen, setPanelOpen] = useState(true);
@@ -32,7 +34,7 @@ export function OperationPage() {
   }, [missionsVersion]);
 
   const areaAlert = alerts.some((a) => a.code === "AREA_OUTSIDE" || a.code === "AREA_NEAR_EDGE" || a.code === "NOFLY_INSIDE");
-  const wireMatches = mission && shadow && (mission.id & 0xffff) === shadow.mission_id;
+  const wireMatches = mission && shadow && mission.id === shadow.mission_id;  // mission_id đủ uint32
 
   return (
     <div className="op-layout">
@@ -52,15 +54,14 @@ export function OperationPage() {
       <main className="op-center">
         <Scene buffer={liveBuffer} clock={liveClock} delayMs={renderDelay} tags={tags} areas={areas}
           plan={mission?.waypoints ?? null} wpIndex={wireMatches ? shadow!.wp_index : undefined}
-          expectedTag={shadow?.expected_tag ?? null} tagDetect={tagDetect} areaAlert={areaAlert}
-          failsafe={!!fast?.failsafe_active} highlightTags={selTag !== null ? new Set([selTag]) : undefined}
+          expectedTag={shadow?.expected_tag ?? null} areaAlert={areaAlert}
+          failsafe={!!shadow?.emergency} highlightTags={selTag !== null ? new Set([selTag]) : undefined}
           onTagClick={(t) => setSelTag(t.tag_id)} />
         <Hud />
       </main>
       <aside className={`op-right${panelOpen ? "" : " collapsed"}`}>
         <button className="collapse" onClick={() => setPanelOpen(!panelOpen)}>{panelOpen ? "›" : "‹"}</button>
         {panelOpen && <>
-          <ManualControl tags={tags.filter((t) => t.enabled)} gotoTag={selTag} />
           <TelemetryPanel />
         </>}
       </aside>

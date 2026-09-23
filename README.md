@@ -1,11 +1,14 @@
-# GCS — Trạm điều khiển mặt đất (ESP-NOW, giám sát 3D)
+# GCS — Trạm điều khiển mặt đất (MAVLink 2 / UDP, giám sát 3D)
 
-Phần mềm trạm mặt đất theo đặc tả [docs/thiet_ke_gcs_espnow_3d.md](docs/thiet_ke_gcs_espnow_3d.md):
-backend Python (FastAPI + asyncio), frontend React + Three.js (react-three-fiber), liên kết nhị phân tự định nghĩa
-qua ESP-NOW. Hiện chạy hoàn toàn **không cần phần cứng** nhờ drone giả lập.
+Phần mềm trạm mặt đất cho drone AprilTag không GPS: backend Python (FastAPI + asyncio), frontend React + Three.js.
+Kênh nhiệm vụ nói **MAVLink 2 qua UDP** theo [docs/GIAO_UOC_GCS_PI.md](docs/GIAO_UOC_GCS_PI.md) — bản sao chỉ đọc
+của hợp đồng, bản gốc ở repo `drone-ros2-jazzy`. Chạy hoàn toàn **không cần phần cứng** nhờ Pi giả lập.
 
-- Kiến trúc & tình trạng: [docs/KIEN_TRUC_TRIEN_KHAI.md](docs/KIEN_TRUC_TRIEN_KHAI.md)
-- Điểm cần chốt với đội firmware/Pi 4: [docs/DIEM_CAN_CHOT.md](docs/DIEM_CAN_CHOT.md)
+Đây là **kênh nhiệm vụ, không phải kênh điều khiển bay**. GCS không arm, không lái, không điều khiển failsafe;
+người lái dùng RC trực tiếp tới FC. Mất kênh này thì drone phải tự hoàn thành hoặc tự về.
+
+- Kế hoạch chuyển đổi và tình trạng: [docs/KE_HOACH_CHUYEN_MAVLINK.md](docs/KE_HOACH_CHUYEN_MAVLINK.md)
+- Kiến trúc: [docs/KIEN_TRUC_TRIEN_KHAI.md](docs/KIEN_TRUC_TRIEN_KHAI.md)
 
 ## Yêu cầu
 
@@ -21,13 +24,15 @@ cd ..\web
 npm install
 ```
 
+`pymavlink` được **ghim 2.4.49** ở cả hai phía: bộ sinh mã là một phần của hợp đồng y như file XML (giao ước 7.1).
+
 ## Chạy thử (3 cửa sổ)
 
 ```powershell
-# 1. Drone giả lập (đóng vai dongle + ESP-NOW + Pi 4)
-cd backend; .venv\Scripts\python -m gcs_backend.sim.fake_drone
+# 1. Pi giả lập — nói đúng giao ước, gọi ra trước như Pi thật sau NAT
+cd backend; .venv\Scripts\python -m gcs_backend.sim.fake_pi
 
-# 2. Backend
+# 2. Backend (nghe UDP :14550)
 cd backend; .venv\Scripts\python -m uvicorn gcs_backend.main:app --port 8000
 
 # 3. Frontend (dev, có hot reload) → http://localhost:5173
@@ -39,36 +44,44 @@ Hoặc build frontend một lần (`cd web; npm run build`) rồi mở thẳng h
 Tài khoản mặc định: `admin/admin` và `operator/operator` (đổi bằng biến môi trường `GCS_ADMIN_PASSWORD`, …).
 Lần chạy đầu tạo sẵn khu vực mẫu (Home + 4 tag + vùng bay + 1 vùng cấm).
 
-Kịch bản thử nhanh: đăng nhập admin → banner đỏ "bản đồ tag lệch" → bấm **Đồng bộ bản đồ** → tab **Nhiệm vụ**
-chọn A → B → **Lập kế hoạch** → **Tải lên** → **Bắt đầu** → quay lại **Vận hành 3D** (phím 1–4, 0 đổi góc nhìn).
+Kịch bản thử nhanh: đăng nhập admin → banner đỏ "bản đồ tag lệch" → **Tải tags.yaml** rồi chép sang Pi
+→ tab **Nhiệm vụ** chọn A → B → **Lập kế hoạch** → **Tải lên** → **Bắt đầu** → quay lại **Vận hành 3D**.
 
-### Gây lỗi trên drone giả lập
+## Chữ ký gói — mặc định BẬT
 
-Cổng điều khiển text `127.0.0.1:5761` (dùng `ncat`, `telnet` hoặc PowerShell):
+UDP thuần trên 4G công cộng nghĩa là **bất cứ ai biết `IP:port` đều gửi được lệnh cho drone**, kể cả lệnh cắt
+động cơ. MAVLink 2 ký gói bằng HMAC-SHA256 với khoá 32 byte chia sẻ trước (giao ước 7.6):
 
+```powershell
+# sinh khoá, chép ĐÚNG khoá này sang Pi, quyền 600, KHÔNG commit
+cd backend; .venv\Scripts\python -c "import os,pathlib;pathlib.Path('gcs_signing.key').write_bytes(os.urandom(32))"
 ```
-drop 0.3        rớt 30 % gói         outage 8     mất liên kết 8 s
-hang 10         Pi 4 treo 10 s       dongle off   mất dongle
-noeffect on     ACK mà không làm     param low_battery_pct 30   lệch cấu hình
-reject 0x11 3   từ chối lệnh         battery 20   đặt % pin
-```
 
-### Cấu hình (biến môi trường `GCS_*` hoặc `backend/.env`)
+Chạy trong mạng kín thì đặt `GCS_SIGNING=false` — và đó phải là quyết định có chủ ý, không phải mặc định.
+
+## Cấu hình (biến môi trường `GCS_*` hoặc `backend/.env`)
 
 | Biến | Mặc định | |
 |---|---|---|
-| `GCS_LINK_URL` | `tcp://127.0.0.1:5760` | `serial://COM5?baud=921600` khi có dongle ESP32 |
-| `GCS_SESSION_KEY` | khóa mẫu | 32 ký tự hex, phải trùng phía drone |
+| `GCS_MAV_PORT` | `14550` | cổng UDP GCS lắng nghe; Pi gọi ra trước tới đây |
+| `GCS_MAV_HOST` | `0.0.0.0` | |
+| `GCS_SIGNING` | `true` | tắt **chỉ khi** Pi và GCS cùng mạng kín |
+| `GCS_SIGNING_KEY_FILE` | `./gcs_signing.key` | 32 byte nhị phân hoặc 64 ký tự hex |
 | `GCS_DB_URL` | `sqlite:///./gcs.db` | |
 | `GCS_JWT_SECRET` | khóa mẫu | **đổi khi triển khai** |
 
-Khóa PMK/LMK của ESP-NOW **không** đưa vào git (mục 4.3).
+GCS phải có **điểm cuối ổn định** (IP tĩnh, DNS động, hoặc VPN chung): modem 4G nằm sau CGNAT nên GCS không
+bao giờ chủ động mở kết nối tới Pi được (giao ước 2.1).
 
 ## Kiểm thử
 
 ```powershell
-cd backend; .venv\Scripts\python -m pytest            # 48 test: giao thức, A1–A4, A9–A11, A16, đầu-cuối
-cd web; npm test                                       # A6 hệ trục 3D, A8 không ngoại suy
+cd backend; .venv\Scripts\python -m pytest    # 62 test: dialect A13–A15, liên kết C4/C5, lệnh A4–A7/A16, đầu-cuối
+cd web; npm test                              # hệ trục 3D, không ngoại suy qua khoảng trống
 ```
 
-`$env:GCS_FUZZ_N=1000000` để chạy A1 đủ 10⁶ khung.
+Bắt gói để gỡ lỗi (chữ ký **không** mã hoá nội dung, cố ý — gỡ lỗi được quan trọng hơn giữ kín nhiệm vụ):
+
+```bash
+sudo tcpdump -i any -n udp port 14550 or udp port 14551 -w /tmp/gcs.pcap
+```

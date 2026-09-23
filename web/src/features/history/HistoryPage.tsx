@@ -15,7 +15,7 @@ class ReplaySource {
   private base = 0; private wall = 0;
   rate = 1; playing = false;
   load(rows: TelemetryRow[]) {
-    this.buffer.load(rows.map((r) => makeSample(r.t_utc * 1000, [r.pos_n, r.pos_e, r.pos_d], [r.roll, r.pitch, r.yaw], r.fsm_state, r.flags, r.wp_index, r.battery_pct)));
+    this.buffer.load(rows.map((r) => makeSample(r.t_utc * 1000, [r.pos_n, r.pos_e, r.pos_d], [r.roll, r.pitch, r.yaw], r.fsm_state, false, r.wp_index)));
     this.t0 = rows.length ? rows[0].t_utc * 1000 : 0;
     this.t1 = rows.length ? rows[rows.length - 1].t_utc * 1000 : 0;
     this.seek(this.t0);
@@ -63,7 +63,6 @@ function ReplayPlayer({ mission, onClose }: { mission: Mission; onClose: () => v
         <div className="hud">
           <div className="hud-item"><label>Thời điểm</label><b>{loaded ? timeStr(t / 1000) : "…"}</b></div>
           <div className="hud-item"><label>Độ cao</label><b>{cur ? (-cur.ned[2]).toFixed(1) : "—"} m</b></div>
-          <div className="hud-item"><label>Pin</label><b>{cur?.batt ?? "—"} %</b></div>
           <div className="hud-item wide"><label>FSM</label><b>{cur ? FSM_NAMES[cur.fsm] : "—"}</b><small>WP {cur?.wp ?? "—"}</small></div>
         </div>
       </div>

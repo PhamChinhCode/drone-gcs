@@ -4,6 +4,7 @@ import { AdminPage } from "../features/admin/AdminPage";
 import { LinkDiagnostics } from "../features/admin/LinkDiagnostics";
 import { AlertsPage } from "../features/alerts/AlertsPage";
 import { HistoryPage } from "../features/history/HistoryPage";
+import { DronePage } from "../features/drone/DronePage";
 import { MissionPage } from "../features/mission/MissionPage";
 import { Banners } from "../features/monitor/Banners";
 import { EmergencyBar } from "../features/monitor/EmergencyBar";
@@ -28,7 +29,7 @@ function Layout() {
   useEffect(() => { void loadSite(); }, [siteVersion, loadSite]);
 
   const nav: [string, string, boolean][] = [
-    ["/", "Vận hành 3D", true], ["/missions", "Nhiệm vụ", true], ["/history", "Lịch sử", true], ["/alerts", "Cảnh báo", true],
+    ["/", "Vận hành 3D", true], ["/drone", "Drone", true], ["/missions", "Nhiệm vụ", true], ["/history", "Lịch sử", true], ["/alerts", "Cảnh báo", true],
     ["/design", "Thiết kế khu vực", admin], ["/tags", "Tag", admin], ["/link", "Liên kết", admin], ["/admin", "Quản trị", admin],
   ];
   return (
@@ -46,6 +47,7 @@ function Layout() {
       <div className="content">
         <Routes>
           <Route path="/" element={<OperationPage />} />
+          <Route path="/drone" element={<DronePage />} />
           <Route path="/missions" element={<MissionPage />} />
           <Route path="/history" element={<HistoryPage />} />
           <Route path="/alerts" element={<AlertsPage />} />

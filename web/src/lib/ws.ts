@@ -33,18 +33,30 @@ function handle(item: Item) {
     case "telem_fast": {
       const f = item as unknown as TelemFast;
       skew.observe(f.t_gcs);
-      liveBuffer.push(makeSample(f.t_gcs, f.pos, f.att, f.fsm_state, f.flags, f.wp_index, f.battery_pct));
+      const sh = useLive.getState().shadow;
+      liveBuffer.push(makeSample(f.t_gcs, f.pos, f.att, sh?.fsm_state ?? 0, f.jump, sh?.wp_index ?? 0));
       const now = performance.now();
       if (now - lastHud > 200) { lastHud = now; set({ fast: f }); }
       break;
     }
-    case "telem_slow": set({ slow: item as never }); break;
-    case "tag_detect": set({ tagDetect: item as never }); break;
-    case "mission_state": set({ shadow: item as never }); break;
+    case "telem": {
+      // gói trạng thái 2 Hz mang cả shadow lẫn telemetry; vị trí đi đường riêng ở trên
+      const sh = item as unknown as import("./types").Shadow;
+      // POS_VALID vừa bật: có số đo thật rồi thì vứt phỏng đoán đi, đừng để hai cái cùng tồn tại
+      const drop = sh.telem?.valid.pos && useLive.getState().assumedPos ? { assumedPos: null } : {};
+      set({ shadow: sh, telem: sh.telem, ...drop });
+      break;
+    }
+    case "statustext": {
+      const t = item as unknown as { severity: number; text: string };
+      set({ statusTexts: [{ at: Date.now(), ...t }, ...useLive.getState().statusTexts].slice(0, 50) });
+      break;
+    }
     case "link": {
       const l = item as never as import("./types").LinkStatus;
       const h = useLive.getState().linkHistory;
-      const point = { t: Date.now(), rssi: l.dongle.last_rssi_dbm ?? null, pdr: l.pdr_pct, rtt: l.rtt_ms_avg };
+      const point = { t: Date.now(), rssi: useLive.getState().telem?.rssi_dbm ?? null,
+                      drop: l.gcs.rx_drop, rtt: l.rtt_ms };
       set({ link: l, linkHistory: [...h.slice(-599), point] });
       break;
     }
@@ -74,13 +86,14 @@ function handle(item: Item) {
 
 function hello(msg: Item) {
   const s = msg as unknown as {
-    shadow: never; link: never; map: never; alerts: Alert[]; active_mission: never; commands: Command[];
-    render_delay_ms: number; thresholds: never;
+    shadow: import("./types").Shadow; link: never; map: never; contract: never; alerts: Alert[];
+    active_mission: never; commands: Command[]; render_delay_ms: number; thresholds: never;
   };
   const commands: Record<number, Command> = {};
   s.commands.forEach((c) => { commands[c.id] = c; });
   useLive.setState({
-    shadow: s.shadow, link: s.link, map: s.map, alerts: s.alerts, activeMission: s.active_mission, commands,
+    shadow: s.shadow, telem: s.shadow?.telem ?? null, fast: s.shadow?.fast ?? null, link: s.link, map: s.map,
+    contract: s.contract, alerts: s.alerts, activeMission: s.active_mission, commands,
     renderDelayMs: s.render_delay_ms, thresholds: s.thresholds,
   });
 }

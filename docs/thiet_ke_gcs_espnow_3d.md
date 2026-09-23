@@ -1,5 +1,13 @@
 # Đặc tả Thiết kế Phần mềm Trạm Điều khiển Mặt đất (GCS) — Liên kết ESP-NOW, Giám sát 3D
 
+> **LỖI THỜI từ 17/09/2026.** Tài liệu này mô tả kênh ESP-NOW (dongle ESP32, khung COBS + CRC16 + HMAC,
+> 27 bản tin tự định nghĩa). Kênh đó **đã bị thay** bằng MAVLink 2 / UDP theo
+> [GIAO_UOC_GCS_PI.md](GIAO_UOC_GCS_PI.md). Giữ lại làm lịch sử và vì các mục không thuộc tầng liên kết
+> (thiết kế khu vực, cảnh báo, phát lại, quyền người dùng, CSDL) **vẫn đúng**.
+> Xem [KE_HOACH_CHUYEN_MAVLINK.md](KE_HOACH_CHUYEN_MAVLINK.md) để biết mục nào đã thay bằng gì.
+
+**Mục 4–5 (liên kết, bản tin) đã lỗi thời hoàn toàn.**
+
 *Tài liệu đặc tả thi công — biên soạn 14/09/2026.
 Đối tượng đọc: đội phát triển phần mềm GCS (backend + frontend), đội firmware ESP32, đội ROS 2 trên Pi 4.
 Tài liệu này đặc tả **mới** phần GCS và tầng truyền thông ESP-NOW; nó **không thay thế**

@@ -9,7 +9,8 @@ import { useLive } from "../../store/live";
 import { useSite } from "../../store/site";
 import { Scene } from "../scene3d/Scene";
 
-type Stop = { tag_id: number; land: boolean; action: string };
+/** Một điểm dừng = một mục kế hoạch: bay tới, tìm marker, hạ, làm action, cất cánh lại (3.2b). */
+type Stop = { tag_id: number; action: string };
 
 export function MissionPage() {
   const { tags, areas, site } = useSite();
@@ -46,7 +47,7 @@ export function MissionPage() {
   };
 
   const onTagClick = (t: Tag) => {
-    if (mode === "custom") { setStops([...stops, { tag_id: t.tag_id, land: false, action: "none" }]); return; }
+    if (mode === "custom") { setStops([...stops, { tag_id: t.tag_id, action: "none" }]); return; }
     if (pickup === "" || dropoff !== "") { setPickup(t.tag_id); setDropoff(""); }
     else if (t.tag_id !== pickup) setDropoff(t.tag_id);
   };
@@ -92,10 +93,9 @@ export function MissionPage() {
               {stops.map((s, i) => (
                 <li key={i}>
                   {tags.find((t) => t.tag_id === s.tag_id)?.label} #{s.tag_id}
-                  <label><input type="checkbox" checked={s.land} onChange={(e) => setStops(stops.map((x, j) => j === i ? { ...x, land: e.target.checked } : x))} /> hạ</label>
-                  {s.land && <select value={s.action} onChange={(e) => setStops(stops.map((x, j) => j === i ? { ...x, action: e.target.value } : x))}>
-                    <option value="none">—</option><option value="pickup">lấy</option><option value="dropoff">giao</option><option value="wait">chờ</option>
-                  </select>}
+                  <select value={s.action} onChange={(e) => setStops(stops.map((x, j) => j === i ? { ...x, action: e.target.value } : x))}>
+                    <option value="none">ghé</option><option value="pickup">lấy</option><option value="dropoff">giao</option>
+                  </select>
                   <button className="link" onClick={() => setStops(stops.filter((_, j) => j !== i))}>xóa</button>
                 </li>
               ))}
@@ -119,11 +119,10 @@ export function MissionPage() {
             {sel.fail_reason && <div className="error small">{sel.fail_reason}</div>}
             {blocked && <div className="error small">Bản đồ tag lệch với drone — không tải lên / bắt đầu được.</div>}
             <table className="grid small">
-              <thead><tr><th>#</th><th>tag</th><th>N</th><th>E</th><th>cao</th><th>hành động</th><th>cờ</th><th>đã tới</th></tr></thead>
+              <thead><tr><th>#</th><th>tag</th><th>N</th><th>E</th><th>cao trên tag</th><th>hành động</th><th>đã tới</th></tr></thead>
               <tbody>{sel.waypoints?.map((w) => (
                 <tr key={w.seq}><td>{w.seq}</td><td>{w.tag_id ?? "—"}</td><td>{w.pos_n_m.toFixed(1)}</td><td>{w.pos_e_m.toFixed(1)}</td>
                   <td>{(-w.pos_d_m).toFixed(1)}</td><td>{w.action}</td>
-                  <td>{[w.require_tag_lock && "lock", w.precision_land && "precision"].filter(Boolean).join(" ")}</td>
                   <td>{w.reached_at ? "✓" : ""}</td></tr>
               ))}</tbody>
             </table>
@@ -133,8 +132,6 @@ export function MissionPage() {
                 {busy === "upload" ? "Đang tải lên…" : "1. Tải lên drone"}
               </button>
               <button className="primary" disabled={!!busy || blocked || sel.state !== "ready"} onClick={() => act("start", () => post(`/api/missions/${sel.id}/start`))}>2. Bắt đầu</button>
-              <button disabled={sel.state !== "running"} onClick={() => act("pause", () => post(`/api/missions/${sel.id}/pause`))}>Tạm dừng</button>
-              <button disabled={sel.state !== "running"} onClick={() => act("resume", () => post(`/api/missions/${sel.id}/resume`))}>Tiếp tục</button>
               <button className="danger" disabled={!["queued", "ready", "running"].includes(sel.state)} onClick={() => act("abort", () => post(`/api/missions/${sel.id}/abort`))}>Hủy</button>
             </div>
           </div>

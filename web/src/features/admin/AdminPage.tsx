@@ -11,7 +11,6 @@ export function AdminPage() {
   const [users, setUsers] = useState<(User & { last_login: string | null })[]>([]);
   const [config, setConfig] = useState<ConfigRow[]>([]);
   const [edits, setEdits] = useState<Record<string, string>>({});
-  const [push, setPush] = useState(false);
   const [audit, setAudit] = useState<AuditRow[]>([]);
   const [nu, setNu] = useState({ username: "", password: "", role: "operator" });
   const [err, setErr] = useState<string | null>(null);
@@ -32,7 +31,7 @@ export function AdminPage() {
     <div className="page">
       {err && <div className="error">{err}</div>}
       <div className="panel">
-        <h3>Ngưỡng an toàn — phải khớp safety.yaml phía Pi 4</h3>
+        <h3>Ngưỡng an toàn — gương của safety.yaml phía Pi</h3>
         <table className="grid">
           <thead><tr><th>Khóa</th><th>GCS</th><th>Drone</th><th>Khớp</th><th>Kiểm lúc</th></tr></thead>
           <tbody>{config.map((c) => (
@@ -46,14 +45,18 @@ export function AdminPage() {
           ))}</tbody>
         </table>
         <div className="btn-row">
-          <label className="check"><input type="checkbox" checked={push} onChange={(e) => setPush(e.target.checked)} /> Đồng thời gửi PARAM_SET xuống drone</label>
           <button className="primary" disabled={!Object.keys(edits).length} onClick={() => run(async () => {
-            await put("/api/config", { values: Object.fromEntries(Object.entries(edits).map(([k, v]) => [k, +v])), push_to_drone: push });
+            await put("/api/config", { values: Object.fromEntries(Object.entries(edits).map(([k, v]) => [k, +v])) });
             setEdits({});
-          })}>Lưu ngưỡng</button>
-          <button onClick={() => run(() => post("/api/config/check"))}>Đối chiếu lại với drone</button>
+          })}>Lưu ngưỡng (chỉ phía GCS)</button>
+          <button onClick={() => run(() => post("/api/config/check"))}>Đọc lại từ drone</button>
         </div>
-        <p className="muted small">Đối chiếu tự động mỗi khi liên kết nối lại (REQUEST(PARAMS) → PARAM_VALUE).</p>
+        <p className="muted small">
+          Bảng này <b>không sửa được ngưỡng của drone</b>: Pi bỏ qua PARAM_SET, ngưỡng chỉ sửa ở
+          <code>safety.yaml</code> / <code>mission.yaml</code> phía Pi, nơi có người chịu trách nhiệm và có
+          lịch sử git (giao ước 9.4). Sửa ở đây chỉ đổi giá trị GCS dùng để <i>đối chiếu</i> và để cảnh báo.
+          Đối chiếu tự động mỗi khi liên kết nối lại (PARAM_REQUEST_LIST → PARAM_VALUE).
+        </p>
       </div>
       <div className="panel">
         <h3>Người dùng</h3>

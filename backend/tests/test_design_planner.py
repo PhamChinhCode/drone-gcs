@@ -1,4 +1,4 @@
-"""Bộ kiểm tra thiết kế — A16: đủ 10 mã kích hoạt đúng. Planner — quy tắc tách pha ngang/hạ độ cao (6.1)."""
+"""Bộ kiểm tra thiết kế: đủ 10 mã kích hoạt đúng. Planner: một mục mỗi điểm dừng (giao ước 3.2b)."""
 import pytest
 
 from gcs_backend.mission import planner
@@ -55,18 +55,30 @@ def test_errors_block():
     assert has_errors(validate_design(d))
 
 
-def test_plan_pickup_dropoff_separates_horizontal_and_vertical():
+def test_moi_diem_dung_mot_muc_va_tu_them_home_cuoi():
+    """Giao ước 3.2b: một mục = bay tới -> tìm marker -> hạ -> làm action -> cất cánh lại."""
     tags = good_design()["tags"]
-    wps = planner.plan_pickup_dropoff(tags, 1, 2, cruise_alt_m=5, max_vel_mps=3, accept_radius_m=1.5)
-    assert len(wps) == 9
-    for a, b in zip(wps, wps[1:]):
-        moved_h = (a["pos_n_m"], a["pos_e_m"]) != (b["pos_n_m"], b["pos_e_m"])
-        moved_v = a["pos_d_m"] != b["pos_d_m"]
-        assert not (moved_h and moved_v), f"chặng {a['seq']}→{b['seq']} đi chéo"
-    assert wps[2]["action"] == "pickup" and wps[2]["precision_land"] and wps[2]["tag_id"] == 1
-    assert wps[5]["action"] == "dropoff" and wps[5]["tag_id"] == 2
-    assert wps[1]["require_tag_lock"] and wps[1]["pos_d_m"] == -5
-    assert wps[8]["precision_land"] and wps[8]["tag_id"] == 0
+    wps = planner.plan_pickup_dropoff(tags, 1, 2, cruise_alt_m=5, max_vel_mps=1.5, accept_radius_m=1.5)
+    assert [w["tag_id"] for w in wps] == [1, 2, 0], "hai điểm dừng + home; không có mục đi ngang rời"
+    assert [w["action"] for w in wps] == ["pickup", "dropoff", "none"]
+    assert wps[-1]["tag_id"] == 0, "kế hoạch KHÔNG tự về home — mục home cuối là do GCS thêm"
+    assert wps[0]["pos_d_m"] == -5, "cao hơn tag 5 m"
+
+
+def test_khong_them_home_neu_diem_cuoi_da_la_home():
+    tags = good_design()["tags"]
+    wps = planner.plan_stops(tags, [{"tag_id": 1}, {"tag_id": 0}], cruise_alt_m=2, max_vel_mps=1,
+                             accept_radius_m=1)
+    assert [w["tag_id"] for w in wps] == [1, 0]
+
+
+def test_diem_dung_phai_co_tag_va_khong_qua_16_muc():
+    tags = good_design()["tags"]
+    with pytest.raises(planner.PlanError, match="tag_id"):
+        planner.plan_stops(tags, [{"pos_n_m": 1, "pos_e_m": 2}], cruise_alt_m=2, max_vel_mps=1,
+                           accept_radius_m=1)
+    with pytest.raises(planner.PlanError, match="16"):
+        planner.plan_stops(tags, [{"tag_id": 1}] * 16, cruise_alt_m=2, max_vel_mps=1, accept_radius_m=1)
 
 
 def test_plan_rejects_bad_input():
@@ -78,7 +90,9 @@ def test_plan_rejects_bad_input():
 
 
 def test_plan_warns_crossing_no_fly():
+    """Chặng tag 1 (10, 10) -> home (0, 0) đi xuyên ô vuông 2..8. Cảnh báo, KHÔNG cưỡng chế (9.3)."""
     tags = good_design()["tags"]
-    wps = planner.plan_pickup_dropoff(tags, 1, 2, cruise_alt_m=5, max_vel_mps=3, accept_radius_m=1.5)
-    warn = planner.plan_warnings(wps, [area("operating", SQUARE), area("no_fly", [[2, 2], [2, 8], [8, 8], [8, 2]], "kho")])
+    wps = planner.plan_stops(tags, [{"tag_id": 1}], cruise_alt_m=5, max_vel_mps=1.5, accept_radius_m=1.5)
+    warn = planner.plan_warnings(wps, [area("operating", SQUARE),
+                                       area("no_fly", [[2, 2], [2, 8], [8, 8], [8, 2]], "kho")])
     assert any("kho" in w for w in warn)

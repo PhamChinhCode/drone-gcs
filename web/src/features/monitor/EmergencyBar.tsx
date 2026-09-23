@@ -1,5 +1,12 @@
-// Thanh khẩn cấp (mục 8.3): luôn hiển thị, không nằm trong tab/menu.
-// Giữ 800 ms để xác nhận (nhả sớm = hủy); trạng thái ba giai đoạn: đang gửi → đã nhận (ACK) → đã có hiệu lực.
+// Thanh khẩn cấp: luôn hiển thị, không nằm trong tab/menu.
+//
+// Bốn lệnh của giao ước 4.2, phát lại mỗi 0,5 s KHÔNG giới hạn tới khi có ACK hoặc người vận hành
+// huỷ — một lệnh LAND dừng thử sau 3 giây là bỏ drone lại giữa không trung. Vì thế nút "huỷ phát
+// lại" phải luôn bấm được, và ba giai đoạn (gửi → ACK → có hiệu lực) đọc từ TRẠNG THÁI drone chứ
+// không từ ACK: ACCEPTED chỉ nghĩa là FSM đã nhận.
+//
+// Không có ARM ở đây, và sẽ không bao giờ có: arm từ xa nghĩa là động cơ quay khi người ra lệnh
+// không nhìn thấy drone (9.3).
 import { useRef, useState } from "react";
 import { errMsg, post } from "../../lib/api";
 import type { Command } from "../../lib/types";
@@ -59,33 +66,10 @@ function HoldButton({ label, action, cls }: { label: string; action: string; cls
       {(cmd || err) && (
         <div className={`em-stage ${bad || err ? "bad" : stage === "effective" ? "good" : ""}`}>
           {err ?? STAGE_LABEL[stage!]}
-          {cmd?.ack && <span className="muted"> · {cmd.ack.rtt_ms} ms</span>}
+          {cmd?.ack && <span className="muted"> · {cmd.ack.attempts} lần gửi</span>}
           {cmd && stage === "sending" && (
             <button className="link" onClick={() => post(`/api/commands/${cmd.id}/cancel`)}>hủy phát lại</button>
           )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function KillMenu() {
-  const [open, setOpen] = useState(false);
-  const [word, setWord] = useState("");
-  const [msg, setMsg] = useState<string | null>(null);
-  return (
-    <div className="kill">
-      <button className="ghost danger" onClick={() => setOpen(!open)}>KILL ▾</button>
-      {open && (
-        <div className="kill-pop">
-          <p><b>Ngắt động cơ trên không</b> — drone sẽ RƠI. Chỉ dùng khi mất kiểm soát hoàn toàn ở nơi có người.</p>
-          <input placeholder='Gõ "KILL" để xác nhận' value={word} onChange={(e) => setWord(e.target.value)} />
-          <button className="danger" disabled={word !== "KILL"} onClick={async () => {
-            try { await post("/api/commands/emergency", { action: "KILL", confirm_token: word }); setMsg("đã gửi KILL"); }
-            catch (e) { setMsg(errMsg(e)); }
-            setWord("");
-          }}>Gửi KILL</button>
-          {msg && <div className="muted">{msg}</div>}
         </div>
       )}
     </div>
@@ -96,10 +80,11 @@ export function EmergencyBar() {
   const admin = useIsAdmin();
   return (
     <div className="emergency-bar">
-      <HoldButton label="RTH" action="RTH" cls="em-rth" />
-      <HoldButton label="HẠ CÁNH NGAY" action="LAND_NOW" cls="em-land" />
+      <HoldButton label="VỀ NHÀ (RTH)" action="RTH" cls="em-rth" />
+      <HoldButton label="HẠ CÁNH NGAY" action="LAND" cls="em-land" />
       <HoldButton label="HỦY NHIỆM VỤ" action="ABORT_MISSION" cls="em-abort" />
-      {admin && <KillMenu />}
+      {/* DISARM giữa không trung = cắt động cơ, drone RƠI. param2 = 21196 ở backend (4.1). */}
+      {admin && <HoldButton label="CẮT ĐỘNG CƠ" action="DISARM" cls="em-abort danger" />}
     </div>
   );
 }

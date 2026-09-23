@@ -450,6 +450,13 @@ export function SiteDesignPage() {
             <label>Bán kính liên kết ĐO ĐƯỢC từ T2 (m)<input type="number" placeholder="chưa đo" value={draft.site.link_radius_meas_m ?? ""} disabled={!admin} onChange={(e) => update((d) => { d.site.link_radius_meas_m = e.target.value === "" ? null : +e.target.value; })} /></label>
             <label>Trạm GCS N<input type="number" value={draft.site.gcs_pos_n_m} disabled={!admin} onChange={(e) => update((d) => { d.site.gcs_pos_n_m = +e.target.value; })} /></label>
             <label>Trạm GCS E<input type="number" value={draft.site.gcs_pos_e_m} disabled={!admin} onChange={(e) => update((d) => { d.site.gcs_pos_e_m = +e.target.value; })} /></label>
+            {/* Gốc WGS84 của bản đồ tag (giao ước 0.7): điểm N = E = 0 (thường là pad home). Đo tại chỗ bằng
+                `ros2 run drone_estimation gps_survey` trên Pi. Để trống = không gắn bản đồ với mặt đất:
+                drone không dùng GPS và GCS không nhận toạ độ. */}
+            <label>Gốc bản đồ — vĩ độ<input type="number" step="0.0000001" placeholder="chưa khai" value={draft.site.origin_lat ?? ""} disabled={!admin} onChange={(e) => update((d) => { d.site.origin_lat = e.target.value === "" ? null : +e.target.value; })} /></label>
+            <label>Gốc bản đồ — kinh độ<input type="number" step="0.0000001" placeholder="chưa khai" value={draft.site.origin_lon ?? ""} disabled={!admin} onChange={(e) => update((d) => { d.site.origin_lon = e.target.value === "" ? null : +e.target.value; })} /></label>
+            <label>Gốc bản đồ — độ cao MSL (m)<input type="number" placeholder="0" value={draft.site.origin_alt_m ?? ""} disabled={!admin} onChange={(e) => update((d) => { d.site.origin_alt_m = e.target.value === "" ? null : +e.target.value; })} /></label>
+            <label>Trục N bản đồ lệch Bắc thật (°, chiều kim)<input type="number" step="0.1" value={draft.site.yaw_offset_deg} disabled={!admin} onChange={(e) => update((d) => { d.site.yaw_offset_deg = +e.target.value; })} /></label>
           </div>
         </div>
         <div className="panel">

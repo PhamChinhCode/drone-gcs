@@ -1,0 +1,14 @@
+# Sinh từ trang thiết kế khu vực của GCS — nguồn vị trí duy nhất của drone khi không có
+# GPS (giao ước 8.6). Chép vào config/ của Pi rồi khởi động lại; trên dây hai bên chỉ so
+# tagmap_crc, và GCS khoá nạp kế hoạch khi lệch.
+#
+# tag_frames PHẢI khớp tag.ids / tag.frames trong apriltag.yaml phía Pi — GCS không biết
+# file đó nên tên dưới đây sinh từ nhãn tag, hãy đối chiếu trước khi dùng.
+/**:
+  ros__parameters:
+    known_tags: [0.0, 0.000, 0.000, 0.000,
+                 1.0, 10.000, 0.000, 0.000,
+                 2.0, 6.826, -6.874, 0.000,
+                 3.0, 5.475, 5.663, 0.000,
+                 4.0, 5.097, -1.254, 0.000]
+    tag_frames: [pad_home, pad_a, pad_b, pad_c, pad_d]

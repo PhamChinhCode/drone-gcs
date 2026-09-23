@@ -1,7 +1,7 @@
-"""Sinh cảnh báo chủ động theo ngưỡng (F5, 5.8, 10.1).
+"""Sinh cảnh báo chủ động theo ngưỡng.
 
-GCS chỉ PHÁT HIỆN SỚM và ĐỀ NGHỊ — mọi failsafe ở đây đều có bản sao phía drone (10.3).
-Cảnh báo vùng bay là CẢNH BÁO, không cưỡng chế (8.4.5, R9).
+GCS chỉ PHÁT HIỆN SỚM và ĐỀ NGHỊ: leo thang failsafe là việc của Pi (giao ước 1.1).
+Cảnh báo vùng bay là CẢNH BÁO, không cưỡng chế — drone không biết vùng bay (9.3).
 """
 from __future__ import annotations
 
@@ -16,12 +16,10 @@ from .thresholds import Thresholds
 NEAR_EDGE_M = 3.0
 
 LINK_ALERTS = {
-    "dongle_lost": ("LINK_DONGLE_LOST", 3, "Mất dongle — kiểm tra cáp USB tới ESP32-GCS"),
-    "drone_silent": ("LINK_DRONE_SILENT", 2,
-                     "Drone im lặng nhưng dongle vẫn gửi thành công — nghi treo phần mềm Pi 4"),
-    "drone_lost": ("LINK_DRONE_LOST", 1, "Mất liên kết drone (> 3 s) — vị trí trong 3D đang đóng băng"),
-    "drone_lost_long": ("LINK_DRONE_LOST_LONG", 3,
-                        "Mất liên kết drone > 10 s — drone sẽ tự kích RTH theo cấu hình"),
+    # 5 s là ngưỡng của GCS; Pi leo thang RTH sau 10 s nữa, cố ý khác nhau để chống rung 4G (9.2)
+    "drone_lost": ("LINK_DRONE_LOST", 2,
+                   "Mất liên kết drone (> 5 s) — vị trí trong 3D đang đóng băng; "
+                   "quá 10 s nữa drone tự kích RTH"),
 }
 
 
@@ -93,24 +91,40 @@ class SafetyMonitor:
         self.clear_prefix("LINK_", keep=code)
         self.raise_(code, sev, "link", msg)
 
-    def evaluate_fast(self, si: dict, th: Thresholds, areas: list[dict]) -> None:
-        batt = si["battery_pct"]
-        if si["armed"] and batt < th.critical_battery_pct:
-            self.clear("BATT_LOW")
-            self.raise_("BATT_CRITICAL", 3, "safety", f"Pin tới hạn {batt} % (< {th.critical_battery_pct:g} %)")
-        elif si["armed"] and batt < th.low_battery_pct:
-            self.clear("BATT_CRITICAL")
-            self.raise_("BATT_LOW", 1, "safety", f"Pin yếu {batt} % (< {th.low_battery_pct:g} %)")
-        elif batt >= th.low_battery_pct or not si["armed"]:
+    def evaluate_state(self, si: dict, th: Thresholds, areas: list[dict]) -> None:
+        """si = vị trí mới nhất ghép với trạng thái gần nhất; pin và armed có thể là None (giao ước 5.2)."""
+        batt, armed = si.get("battery_pct"), si.get("armed")
+        if batt is None:
+            # BATTERY_VALID = 0, hiện LUÔN như vậy vì FC chưa gửi BATTERY_STATUS. Ngưỡng pin trong
+            # safety.yaml trông như đang bảo vệ nhưng không bao giờ kích hoạt được (giao ước 9.2, 9.4).
             self.clear("BATT_LOW")
             self.clear("BATT_CRITICAL")
+            self.raise_("BATT_UNAVAILABLE", 1, "safety",
+                        "Không có số đo pin (BATTERY_VALID = 0) — failsafe pin KHÔNG bảo vệ chuyến này")
+        else:
+            self.clear("BATT_UNAVAILABLE")
+            if armed and batt < th.critical_battery_pct:
+                self.clear("BATT_LOW")
+                self.raise_("BATT_CRITICAL", 3, "safety", f"Pin tới hạn {batt} % (< {th.critical_battery_pct:g} %)")
+            elif armed and batt < th.low_battery_pct:
+                self.clear("BATT_CRITICAL")
+                self.raise_("BATT_LOW", 1, "safety", f"Pin yếu {batt} % (< {th.low_battery_pct:g} %)")
+            elif batt >= th.low_battery_pct or not armed:
+                self.clear("BATT_LOW")
+                self.clear("BATT_CRITICAL")
 
-        if si["failsafe_active"]:
+        if si.get("failsafe_type"):
             self.raise_("FAILSAFE_ACTIVE", 3, "failsafe", "Drone đang ở chế độ failsafe")
         else:
             self.clear("FAILSAFE_ACTIVE")
 
-        n, e, d = si["pos"]
+        pos = si.get("pos")
+        if pos is None:
+            # không có vị trí thì không kết luận gì về vùng bay — im lặng, không phải "an toàn"
+            for code in ("AREA_OUTSIDE", "AREA_NEAR_EDGE", "NOFLY_INSIDE"):
+                self.clear(code)
+            return
+        n, e, d = pos
         airborne = d < -0.3
         operating = [a["vertices"] for a in areas if a["kind"] == "operating" and a.get("enabled", True)
                      and len(a["vertices"]) >= 3]

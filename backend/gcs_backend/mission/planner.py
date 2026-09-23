@@ -1,12 +1,25 @@
-"""Lập kế hoạch nhiệm vụ (mục 6.1).
+"""Lập kế hoạch nhiệm vụ (giao ước 3.2b, 8.3).
 
-Quy tắc chốt: LUÔN tách pha tiếp cận ngang và pha hạ độ cao — bay tới tọa độ ngang của tag ở độ cao
-hành trình, khóa tag rồi mới hạ. Không sinh waypoint đi chéo thẳng xuống bãi đáp.
-Hệ bản đồ NED cục bộ: độ cao h mét trên mặt tag nghĩa là pos_d = tag.pos_d_m − h.
+**Một mục kế hoạch = một điểm dừng theo marker**: bay tới → tìm marker → hạ chính xác → làm `action`
+→ cất cánh lại. Pi làm cả chuỗi đó từ một mục, nên GCS **không** tách pha tiếp cận ngang và pha hạ
+độ cao thành nhiều waypoint như bản ESP-NOW cũ — làm vậy là mô tả lại một việc mà FSM phía Pi đã
+làm, và mỗi mục thừa lại thành một lần hạ cánh thật.
+
+Hai hệ quả của 3.2b mà bộ lập kế hoạch phải tự lo, vì hợp đồng không thêm hành vi ngầm:
+
+- **Kế hoạch không tự về home.** Xong mục cuối, drone hạ cánh **tại chỗ đó** rồi DISARM. Muốn về nhà
+  thì mục cuối phải là tag home với `action = NONE` — thêm ở đây.
+- **Vị trí suy từ `expected_marker_id`**, nên mọi điểm dừng phải là một tag có thật. Điểm theo toạ
+  độ tự do không diễn đạt được trên kênh này nữa.
+
+`pos_*` lưu trong CSDL chỉ để vẽ và để kiểm vùng cấm; thứ đi lên dây là `tag_id` và `alt_m`.
+Quy ước độ cao: `pos_d_m = tag.pos_d_m − alt_m` (cao hơn tag `alt_m` mét).
 """
 from __future__ import annotations
 
 from ..sitedesign.geometry import point_in_polygon
+
+MAX_ITEMS = 16  # giao ước 3.2 — Pi trả ERR_COUNT nếu quá; GCS chặn sớm vì đây là lỗi soạn thảo
 
 
 class PlanError(ValueError):
@@ -29,69 +42,53 @@ def _home(tags: list[dict]) -> dict:
     return homes[0]
 
 
-def _wp(tag: dict, alt: float, *, tag_id: int | None = None, action: str = "none", lock: bool = False,
-        land: bool = False, radius: float, vel: float) -> dict:
-    return {"tag_id": tag_id, "pos_n_m": tag["pos_n_m"], "pos_e_m": tag["pos_e_m"],
-            "pos_d_m": round(tag.get("pos_d_m", 0.0) - alt, 3), "yaw_deg": None, "action": action,
-            "accept_radius_m": radius, "max_vel_mps": vel, "loiter_s": 0.0,
-            "require_tag_lock": lock, "precision_land": land}
+def _wp(tag: dict, alt_m: float, action: str, *, radius: float, vel: float, loiter_s: float = 0.0) -> dict:
+    return {"tag_id": tag["tag_id"], "pos_n_m": tag["pos_n_m"], "pos_e_m": tag["pos_e_m"],
+            "pos_d_m": round(tag.get("pos_d_m", 0.0) - alt_m, 3), "yaw_deg": None, "action": action,
+            "accept_radius_m": radius, "max_vel_mps": vel, "loiter_s": loiter_s,
+            "require_tag_lock": False, "precision_land": True}
+
+
+def plan_stops(tags: list[dict], stops: list[dict], *, cruise_alt_m: float, max_vel_mps: float,
+               accept_radius_m: float) -> list[dict]:
+    """stops = [{tag_id, action?, alt_m?, loiter_s?}]. Tự thêm mục cuối là home với action NONE."""
+    if not stops:
+        raise PlanError("kế hoạch phải có ít nhất một điểm dừng")
+    if cruise_alt_m <= 0:
+        raise PlanError("độ cao phải lớn hơn 0")
+    home = _home(tags)
+    wps = []
+    for s in stops:
+        if s.get("tag_id") is None:
+            raise PlanError("mỗi điểm dừng phải có tag_id — vị trí suy từ marker, không từ toạ độ (3.1)")
+        t = _find(tags, int(s["tag_id"]))
+        action = (s.get("action") or "none").lower()
+        if action not in ("none", "pickup", "dropoff"):
+            raise PlanError(f"action không hợp lệ: {action}")
+        wps.append(_wp(t, float(s.get("alt_m") or cruise_alt_m), action,
+                       radius=t.get("landing_tol_m") or accept_radius_m, vel=max_vel_mps,
+                       loiter_s=float(s.get("loiter_s") or 0.0)))
+    if wps[-1]["tag_id"] != home["tag_id"]:
+        wps.append(_wp(home, cruise_alt_m, "none", radius=home.get("landing_tol_m") or accept_radius_m,
+                       vel=max_vel_mps))
+    if len(wps) > MAX_ITEMS:
+        raise PlanError(f"kế hoạch {len(wps)} mục, quá giới hạn {MAX_ITEMS} của giao ước")
+    for i, w in enumerate(wps):
+        w["seq"] = i
+    return wps
 
 
 def plan_pickup_dropoff(tags: list[dict], pickup_tag: int, dropoff_tag: int, *, cruise_alt_m: float,
-                        max_vel_mps: float, accept_radius_m: float, land_alt_m: float = 0.0) -> list[dict]:
+                        max_vel_mps: float, accept_radius_m: float) -> list[dict]:
     if pickup_tag == dropoff_tag:
         raise PlanError("tag lấy và tag giao phải khác nhau")
-    if cruise_alt_m <= land_alt_m or cruise_alt_m <= 0:
-        raise PlanError("độ cao hành trình phải lớn hơn độ cao hạ")
-    home, a, b = _home(tags), _find(tags, pickup_tag), _find(tags, dropoff_tag)
-    land_vel = min(0.5, max_vel_mps)
-    wps = [
-        _wp(home, cruise_alt_m, radius=accept_radius_m, vel=max_vel_mps),
-        _wp(a, cruise_alt_m, tag_id=a["tag_id"], lock=True, radius=accept_radius_m, vel=max_vel_mps),
-        _wp(a, land_alt_m, tag_id=a["tag_id"], land=True, action="pickup", radius=a["landing_tol_m"], vel=land_vel),
-        _wp(a, cruise_alt_m, radius=accept_radius_m, vel=max_vel_mps),
-        _wp(b, cruise_alt_m, tag_id=b["tag_id"], lock=True, radius=accept_radius_m, vel=max_vel_mps),
-        _wp(b, land_alt_m, tag_id=b["tag_id"], land=True, action="dropoff", radius=b["landing_tol_m"], vel=land_vel),
-        _wp(b, cruise_alt_m, radius=accept_radius_m, vel=max_vel_mps),
-        _wp(home, cruise_alt_m, tag_id=home["tag_id"], radius=accept_radius_m, vel=max_vel_mps),
-        _wp(home, land_alt_m, tag_id=home["tag_id"], land=True, radius=home["landing_tol_m"], vel=land_vel),
-    ]
-    for i, w in enumerate(wps):
-        w["seq"] = i
-    return wps
-
-
-def plan_custom(tags: list[dict], stops: list[dict], *, cruise_alt_m: float, max_vel_mps: float,
-                accept_radius_m: float) -> list[dict]:
-    """Chuỗi điểm tùy biến: mỗi stop = {tag_id, land?, action?} hoặc {pos_n_m, pos_e_m}. Luôn kết thúc về Home."""
-    if not stops:
-        raise PlanError("chuỗi waypoint rỗng")
-    home = _home(tags)
-    land_vel = min(0.5, max_vel_mps)
-    wps = [_wp(home, cruise_alt_m, radius=accept_radius_m, vel=max_vel_mps)]
-    for s in stops:
-        if s.get("tag_id") is not None:
-            t = _find(tags, int(s["tag_id"]))
-            land = bool(s.get("land"))
-            wps.append(_wp(t, cruise_alt_m, tag_id=t["tag_id"], lock=land, radius=accept_radius_m, vel=max_vel_mps))
-            if land:
-                wps.append(_wp(t, 0.0, tag_id=t["tag_id"], land=True, action=s.get("action") or "none",
-                               radius=t["landing_tol_m"], vel=land_vel))
-                wps.append(_wp(t, cruise_alt_m, radius=accept_radius_m, vel=max_vel_mps))
-        else:
-            pt = {"pos_n_m": float(s["pos_n_m"]), "pos_e_m": float(s["pos_e_m"]), "pos_d_m": home.get("pos_d_m", 0.0)}
-            wps.append(_wp(pt, cruise_alt_m, radius=accept_radius_m, vel=max_vel_mps))
-    wps.append(_wp(home, cruise_alt_m, tag_id=home["tag_id"], radius=accept_radius_m, vel=max_vel_mps))
-    wps.append(_wp(home, 0.0, tag_id=home["tag_id"], land=True, radius=home["landing_tol_m"], vel=land_vel))
-    if len(wps) > 255:
-        raise PlanError("quá 255 waypoint")
-    for i, w in enumerate(wps):
-        w["seq"] = i
-    return wps
+    return plan_stops(tags, [{"tag_id": pickup_tag, "action": "pickup"},
+                             {"tag_id": dropoff_tag, "action": "dropoff"}],
+                      cruise_alt_m=cruise_alt_m, max_vel_mps=max_vel_mps, accept_radius_m=accept_radius_m)
 
 
 def plan_warnings(wps: list[dict], areas: list[dict]) -> list[str]:
-    """Cảnh báo phía GCS (KHÔNG cưỡng chế — drone không biết vùng bay, mục 8.4.5)."""
+    """Cảnh báo phía GCS (KHÔNG cưỡng chế — drone không biết vùng bay, giao ước 9.3)."""
     out = []
     operating = [a["vertices"] for a in areas if a["kind"] == "operating" and a.get("enabled", True)]
     no_fly = [(a["name"], a["vertices"]) for a in areas if a["kind"] == "no_fly" and a.get("enabled", True)]
@@ -102,7 +99,8 @@ def plan_warnings(wps: list[dict], areas: list[dict]) -> list[str]:
     for i in range(len(wps) - 1):
         a, b = wps[i], wps[i + 1]
         for k in range(11):  # lấy mẫu dọc chặng
-            p = (a["pos_n_m"] + (b["pos_n_m"] - a["pos_n_m"]) * k / 10, a["pos_e_m"] + (b["pos_e_m"] - a["pos_e_m"]) * k / 10)
+            p = (a["pos_n_m"] + (b["pos_n_m"] - a["pos_n_m"]) * k / 10,
+                 a["pos_e_m"] + (b["pos_e_m"] - a["pos_e_m"]) * k / 10)
             hit = next((name for name, poly in no_fly if point_in_polygon(p, poly)), None)
             if hit:
                 out.append(f"chặng {i}→{i + 1} cắt qua vùng cấm '{hit}'")

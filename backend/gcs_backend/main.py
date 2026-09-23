@@ -1,4 +1,4 @@
-"""FastAPI app: lifespan khởi động các task nền (mục 7.1).
+"""FastAPI app: lifespan khởi động các task nền.
 
 Chạy:  uvicorn gcs_backend.main:app --port 8000
 """
@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
         await rt.stop()
 
 
-app = FastAPI(title="GCS ESP-NOW 3D", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="GCS MAVLink 3D", version="0.2.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=get_settings().cors_origins, allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
 

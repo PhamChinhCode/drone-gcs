@@ -1,58 +1,94 @@
-"""Giao thức tải lên ba pha (mục 5.6) cho nhiệm vụ và bản đồ tag.
+"""Chuyển kế hoạch trong CSDL thành mục trên dây, và xuất `tags.yaml` cho Pi (giao ước 8.3, 8.6).
 
-BEGIN → từng mục một gói, ACK từng gói → END(crc). KHÔNG BAO GIỜ tự kích hoạt bay: START là bản tin riêng.
+Việc nạp do `link_mav.mission_client` lo; ở đây chỉ là phép quy đổi, tách ra để kiểm bằng pytest
+không cần socket.
+
+**Bản đồ tag không còn nạp qua dây.** Giao ước chốt quy trình ngược lại: GCS **xuất `tags.yaml`** để
+người triển khai chép sang Pi, còn trên dây chỉ so `tagmap_crc` (8.6). Lý do là `tags.yaml` là nguồn
+vị trí duy nhất của drone khi không có GPS — nó phải nằm trong git của bên vận hành drone, không
+phải xuất hiện từ một gói UDP.
 """
 from __future__ import annotations
 
-from ..link import messages as m
-from ..link.session import LinkSession, LinkTimeout
+import re
 
-OUTER_RETRIES = 3  # ngoài bảng RETRY của phiên: gửi lại đúng gói bị mất, không gửi lại cả kế hoạch
+from ..link_mav.dialect import drone_gcs as mav
+from ..link_mav.mission_client import Waypoint, to_ascii
 
-
-class UploadError(Exception):
-    def __init__(self, stage: str, reason: str):
-        super().__init__(f"{stage}: {reason}")
-        self.stage, self.reason = stage, reason
+ACTION = {"none": mav.DRONE_ACTION_NONE, "pickup": mav.DRONE_ACTION_PICKUP,
+          "dropoff": mav.DRONE_ACTION_DROPOFF}
 
 
-async def _send_checked(link: LinkSession, msg: m.Message, stage: str) -> None:
-    last = "timeout"
-    for _ in range(OUTER_RETRIES):
-        try:
-            ack = await link.send(msg)
-        except LinkTimeout:
-            continue
-        if ack is not None and ack.result == m.AckResult.OK:
-            return
-        last = m.AckResult(ack.result).name if ack else "no-ack"
-        if ack and ack.result != m.AckResult.REJECT_BUSY:
-            break
-    raise UploadError(stage, last)
+def to_wire(waypoints: list[dict], tags: list[dict], max_vel_mps: float) -> list[Waypoint]:
+    """Mục CSDL -> mục trên dây. `alt_m` đổi gốc: CSDL theo gốc bản đồ, trên dây theo TAG ĐÍCH (8.3)."""
+    tag_d = {t["tag_id"]: t.get("pos_d_m", 0.0) for t in tags}
+    out = []
+    for w in waypoints:
+        if w.get("tag_id") is None:
+            raise ValueError(f"mục {w['seq']} không có tag_id — không diễn đạt được trên kênh này")
+        if w["tag_id"] not in tag_d:
+            raise ValueError(f"mục {w['seq']} trỏ tới tag {w['tag_id']} không còn trong bản đồ")
+        out.append(Waypoint(
+            expected_marker_id=int(w["tag_id"]),
+            alt_m=round(tag_d[w["tag_id"]] - w["pos_d_m"], 3),
+            acceptance_radius_m=w.get("accept_radius_m") or 0.3,
+            max_vel_mps=min(w.get("max_vel_mps") or max_vel_mps, 1.9),  # trần của giao ước 8.3
+            loiter_s=w.get("loiter_s") or 0.0,
+            action=ACTION[(w.get("action") or "none").lower()]))
+    return out
 
 
-async def upload_mission(link: LinkSession, mission: dict, map_crc: int, progress=None) -> dict:
-    mid = mission["id"] & 0xFFFF
-    wps_si = mission["waypoints"]
-    total = len(wps_si)
-    wps = [m.MissionWp.from_si(mid, i, total, w) for i, w in enumerate(wps_si)]
-    wp_crc = m.compute_wp_crc(wps)
-    await _send_checked(link, m.MissionBegin(mid, total, 0, map_crc, round(mission["cruise_alt_m"] * 100)), "BEGIN")
-    for wp in wps:
-        await _send_checked(link, wp, f"WP{wp.seq}")
-        if progress:
-            progress(wp.seq + 1, total)
-    await _send_checked(link, m.MissionEnd(mid, total, 0, wp_crc), "END")
-    return {"mission_wire_id": mid, "total": total, "wp_crc": wp_crc}
+def frame_name(t: dict) -> str:
+    """Tên khung TF của một tag. Tag home là `pad_home`, còn lại lấy theo nhãn: "A" -> `pad_a`."""
+    if t["kind"] == "home":
+        return "pad_home"
+    slug = re.sub(r"[^a-z0-9]+", "_", to_ascii(t.get("label") or "", 32).decode().lower()).strip("_")
+    return f"pad_{slug}" if slug else f"pad_tag{t['tag_id']}"
 
 
-async def sync_tagmap(link: LinkSession, site_id: int, tags: list[dict]) -> int:
-    enabled = [t for t in tags if t.get("enabled", True)]
-    entries = sorted((m.tag_wire_tuple(t) for t in enabled), key=lambda e: e[0])
-    crc = m.map_crc_from_wire(entries)
-    total = len(entries)
-    await _send_checked(link, m.TagmapBegin(site_id & 0xFFFF, total, 0, crc), "TAGMAP_BEGIN")
-    for i, e in enumerate(entries):
-        await _send_checked(link, m.TagmapEntry(i, total, *e), f"TAGMAP_ENTRY{i}")
-    await _send_checked(link, m.TagmapEnd(site_id & 0xFFFF, total, 0, crc), "TAGMAP_END")
-    return crc
+def tags_yaml(tags: list[dict], origin: dict | None = None) -> str:
+    """`config/tags.yaml` của Pi — **file tham số ROS**, không phải YAML tự do.
+
+    Ba chỗ bắt buộc phải đúng, sai một chỗ là ROS từ chối nạp hoặc nạp ra số vô nghĩa:
+
+    - Phải có header `/**: ros__parameters:` — nhiều node cùng đọc file này.
+    - `known_tags` là danh sách **phẳng** `[id, x, y, z, id, x, y, z, …]`, không phải danh sách lồng.
+    - Mọi phần tử phải **cùng kiểu float**, kể cả `id`: danh sách trộn int với float làm ROS báo lỗi
+      kiểu. Đó là lý do bản của Pi ghi `0.0` chứ không ghi `0`.
+
+    Toạ độ theo **ENU mét**: `x = e`, `y = n`, `z = −d` (quy đổi ngược lại nằm ở `tagmap.py`).
+
+    `origin` (0.7): gốc WGS84 của bản đồ — Pi dùng để đưa GPS vào khung bản đồ và quy vị trí ra
+    lat/lon. None thì ghi `geo_origin_valid: false`.
+    """
+    rows = sorted((t for t in tags if t.get("enabled", True)), key=lambda t: t["tag_id"])
+    lines = ["# Sinh từ trang thiết kế khu vực của GCS — nguồn vị trí duy nhất của drone khi không có",
+             "# GPS (giao ước 8.6). Chép vào config/ của Pi rồi khởi động lại; trên dây hai bên chỉ so",
+             "# tagmap_crc, và GCS khoá nạp kế hoạch khi lệch.",
+             "#",
+             "# tag_frames PHẢI khớp tag.ids / tag.frames trong apriltag.yaml phía Pi — GCS không biết",
+             "# file đó nên tên dưới đây sinh từ nhãn tag, hãy đối chiếu trước khi dùng.",
+             "/**:",
+             "  ros__parameters:"]
+    nums = []
+    for t in rows:
+        d = t.get("pos_d_m") or 0.0
+        nums.append((t["tag_id"], t["pos_e_m"], t["pos_n_m"], -d if d else 0.0))
+    if nums:
+        body = [f"{tag_id:.1f}, {x:.3f}, {y:.3f}, {z:.3f}," for tag_id, x, y, z in nums]
+        body[-1] = body[-1].rstrip(",")
+        pad = " " * len("    known_tags: [")
+        lines.append("    known_tags: [" + f"\n{pad}".join(body) + "]")
+        lines.append("    tag_frames: [" + ", ".join(frame_name(t) for t in rows) + "]")
+    else:
+        lines.append("    known_tags: []")
+        lines.append("    tag_frames: []")
+    if origin is None:
+        lines.append("    geo_origin_valid: false")
+    else:
+        lines += ["    geo_origin_valid: true",
+                  f"    geo_origin_lat: {origin['lat']:.7f}",
+                  f"    geo_origin_lon: {origin['lon']:.7f}",
+                  f"    geo_origin_alt: {origin['alt_m']:.3f}",
+                  f"    geo_north_yaw_deg: {origin['north_yaw_deg']:.2f}"]
+    return "\n".join(lines) + "\n"

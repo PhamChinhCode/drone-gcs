@@ -21,6 +21,7 @@ DEFAULT_CONFIG = {
     "critical_battery_pct": "15.0",
     "link_lost_timeout_s": "10.0",
     "marker_search_timeout_s": "20.0",
+    "grip_confirm_timeout_s": "3.0",
     "max_retries": "3",
     "takeoff_alt_m": "5.0",
     "acceptance_radius_m": "1.5",
@@ -117,7 +118,10 @@ class Database:
                 s.add(AppUser(username=settings.operator_user,
                               password_hash=hash_password(settings.operator_password), role="operator"))
             if s.get(Drone, settings.drone_id) is None:
-                s.add(Drone(id=settings.drone_id, name="Drone 1", esp_peer_mac=settings.drone_peer_mac))
+                # esp_peer_mac: cột của kênh ESP-NOW cũ, kênh MAVLink không dùng địa chỉ MAC.
+                # Giữ vì bỏ cột cần migration; điền giá trị trung tính cho ràng buộc unique.
+                s.add(Drone(id=settings.drone_id, name="Drone 1",
+                            esp_peer_mac=f"mavlink:{settings.drone_id}"))
             for k, v in DEFAULT_CONFIG.items():
                 if s.get(SystemConfig, k) is None:
                     s.add(SystemConfig(key=k, value=v))

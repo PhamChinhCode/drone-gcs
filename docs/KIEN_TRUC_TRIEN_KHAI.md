@@ -1,46 +1,53 @@
-# Kiến trúc triển khai GCS — đối chiếu với đặc tả
+# Kiến trúc triển khai GCS
 
-*Cập nhật 14/09/2026. Đặc tả gốc: [thiet_ke_gcs_espnow_3d.md](thiet_ke_gcs_espnow_3d.md).
-Điểm cần chốt với đội firmware/Pi 4: [DIEM_CAN_CHOT.md](DIEM_CAN_CHOT.md).*
+*Cập nhật 17/09/2026 sau khi chuyển kênh sang MAVLink 2 / UDP.*
 
-## 1. Phạm vi đợt này
+**Nguồn sự thật của kênh nhiệm vụ là [GIAO_UOC_GCS_PI.md](GIAO_UOC_GCS_PI.md)** (bản sao chỉ đọc; bản gốc ở
+repo `drone-ros2-jazzy`) và file dialect `backend/gcs_backend/link_mav/drone_gcs.xml`. Thứ tự ưu tiên khi mâu
+thuẫn: phép đo trên dây → XML → tài liệu.
 
-Đã làm **giai đoạn 1–4** của lộ trình (mục 12) — toàn bộ phần không cần phần cứng. Chưa có ESP32 nên liên kết
-chạy qua **drone giả lập** `fake_drone.py` nói đúng giao thức mục 5. Khi có dongle, chỉ cần đổi một biến môi trường:
+`thiet_ke_gcs_espnow_3d.md` mục 4–5 và `DIEM_CAN_CHOT.md` mô tả kênh ESP-NOW cũ, **đã lỗi thời** — giữ lại làm
+lịch sử. Các mục khác của đặc tả (thiết kế khu vực, cảnh báo, phát lại, quyền người dùng) vẫn đúng.
 
-```
-GCS_LINK_URL=tcp://127.0.0.1:5760          # hiện tại: drone giả lập
-GCS_LINK_URL=serial://COM5?baud=921600     # sau này: dongle ESP32-GCS thật
-```
+## 1. Phạm vi
 
-Tầng trên không phân biệt hai trường hợp: cả hai cùng mang luồng khung `COBS(chan_id ‖ đơn vị lớp 3) ‖ 0x00`.
-Windows không có `socat` như 7.5 gợi ý, nên giả lập dùng TCP thay cho cặp cổng serial ảo. Muốn thử serial ảo trên
-Windows thì dùng com0com và chạy giả lập qua cổng đó.
+Kênh nhiệm vụ chạy **MAVLink 2 trên UDP**: GCS nghe `:14550`, Pi gọi ra trước từ `:14551` và GCS trả lời về địa
+chỉ nguồn của **gói hợp lệ gần nhất** — modem 4G nằm sau CGNAT nên chiều ngược lại không mở được (giao ước 2.1).
 
-Chưa làm (giai đoạn 5–7): firmware ESP32 hai đầu, `gcs_link_node` trên Pi 4, kiểm thử T1–T5.
+Chưa có Pi thật trên dây, nên liên kết chạy qua `sim/fake_pi.py` nói đúng hợp đồng. Đổi sang Pi thật chỉ là đổi
+địa chỉ: không có mã nào rẽ nhánh theo "thật hay giả lập".
+
+**GCS không lái.** Không ARM, không TAKEOFF rời, không GOTO, không giữ vị trí tay (giao ước 9.3). Sáu lệnh duy
+nhất đi trên kênh này: `MISSION_START`, `NAV_RETURN_TO_LAUNCH`, `NAV_LAND`, `COMPONENT_ARM_DISARM` (chỉ disarm),
+`DRONE_ABORT_MISSION`, `DO_PAUSE_CONTINUE` (Pi trả `UNSUPPORTED`, GCS ẩn nút).
+
+Còn lại: chạy nghiệm thu 10.A với `gcs_link_node` thật, rồi 10.B (Gazebo) và 10.C (4G thật).
 
 ## 2. Sơ đồ mã nguồn
 
 ```
 GrounControlStation/
 ├── backend/gcs_backend/
-│   ├── link/        cobs.py crc.py frame.py messages.py auth.py serial_io.py session.py
-│   ├── mission/     planner.py uploader.py shadow.py
-│   ├── safety/      thresholds.py monitor.py config_check.py
+│   ├── link_mav/    drone_gcs.xml (dialect, bản sao của repo Pi) + gen_dialect.py → dialect/
+│   │                transport.py (UDP) codec.py (MAVLink 2 + chữ ký) link.py (heartbeat, TIMESYNC,
+│   │                thống kê, ghép STATUSTEXT) commands.py mission_client.py params.py
+│   │                telemetry.py (bản tin → dict SI) tagmap.py (tagmap_crc)
+│   ├── mission/     planner.py uploader.py (→ mục trên dây + tags.yaml) shadow.py
+│   ├── safety/      thresholds.py monitor.py
 │   ├── sitedesign/  geometry.py validator.py          ← bộ kiểm tra 8.4.4 (đặc tả chưa đặt chỗ)
 │   ├── data/        models.py repo.py
 │   ├── api/         rest.py ws.py auth.py
-│   ├── sim/         fake_drone.py
+│   ├── sim/         fake_pi.py
 │   ├── runtime.py   nối link ↔ shadow ↔ kiểm chứng lệnh ↔ cảnh báo ↔ CSDL ↔ WS
 │   ├── bus.py, config.py, main.py
 │   └── tests/ (ở backend/tests)
 └── web/src/
     ├── app/         App.tsx (router, layout), Login.tsx, theme.css
-    ├── lib/         api.ts ws.ts (LiveSource) types.ts units.ts
+    ├── lib/         api.ts ws.ts (LiveSource) types.ts units.ts apriltag36h11.ts (bảng mã 36h11 + dựng SVG)
     ├── store/       auth.ts live.ts site.ts (zustand)
     └── features/
         ├── scene3d/     Scene.tsx CameraRig.tsx coords.ts useTelemetryBuffer.ts objects/
-        ├── monitor/     OperationPage Hud EmergencyBar Banners ManualControl TelemetryPanel
+        ├── monitor/     OperationPage Hud EmergencyBar Banners TelemetryPanel
         ├── mission/     MissionPage (tạo nhiệm vụ + hàng đợi)
         ├── tags/        TagsPage
         ├── sitedesign/  SiteDesignPage (sơ đồ SVG 2D)
@@ -85,19 +92,20 @@ ngay, tiến trình ba giai đoạn đẩy qua WebSocket để thanh khẩn cấ
 | Nhãn trong 3D | Sprite | Sprite vẽ canvas, kích thước cố định trên màn hình | không tải font từ mạng (GCS chạy offline) và đọc được ở góc nhìn toàn khu vực |
 | Hàng đợi | màn hình riêng | gộp trong màn Nhiệm vụ | thao tác chọn/tải lên/bắt đầu liền mạch |
 | Báo cáo | `report.pdf` | `GET /api/missions/{id}/report` (JSON) + hiển thị ở màn phát lại | PDF làm sau |
+| Tờ in tag | `tag-sheet.pdf` | Trang HTML dựng SVG ở client (`apriltag36h11.ts`), mở tab mới để in/lưu PDF từ trình duyệt | không cần thêm thư viện PDF ở backend; SVG in đúng mm ở mọi độ phân giải máy in |
 
 ## 5. Tình trạng yêu cầu chức năng
 
 | Nhóm | Đã có | Chưa có |
 |---|---|---|
-| F1 Tag | CRUD, dạy vị trí từ drone, đồng bộ ba pha + `map_crc` hai bên, chặn nhiệm vụ khi lệch | tờ in tag PDF (cần bảng mã AprilTag 36h11) |
+| F1 Tag | CRUD, dạy vị trí từ drone, đồng bộ ba pha + `map_crc` hai bên, chặn nhiệm vụ khi lệch, in tờ tag đúng kích thước (SVG dựng ở client từ bảng mã 36h11, trang HTML in qua trình duyệt) | — |
 | F2 Điều khiển tay | arm/disarm, cất cánh, bay tới MAP/TAG/BODY, giữ, hạ, hạ chính xác, RTH; ACK + hủy + kiểm chứng | — |
 | F3 Nhiệm vụ | lấy→giao, chuỗi tùy biến, xem trước 3D, tải lên, start/pause/resume/abort tách rời, hàng đợi ưu tiên | kéo-thả sắp xếp (đang dùng nút ▲▼) |
 | F4 Giám sát 3D | toàn bộ cây cảnh 9.1, 5 góc nhìn, nội suy 150 ms không ngoại suy, làm mờ khi cũ, HUD DOM | glTF |
 | F5 Cảnh báo | thanh khẩn cấp giữ 800 ms + 3 giai đoạn, KILL admin + gõ từ khóa, cảnh báo ngưỡng, nhật ký | — |
 | F6 Lịch sử | lưu telemetry/sự kiện, phát lại cùng cảnh 3D, tua, 0,5×/1×/4×, mốc sự kiện, báo cáo JSON | báo cáo PDF, ảnh (kênh WiFi — giai đoạn sau) |
 | F7 Quản trị | 2 cấp quyền JWT, ngưỡng + đối chiếu lệch tự động, chẩn đoán RSSI/PDR/RTT, cấu hình kênh/LR/MAC, audit | — |
-| F8 Thiết kế khu vực | đặt/kéo tag (Shift bắt lưới), Home, vẽ vùng bay/cấm, sửa đỉnh, thước đo bắt tâm tag, ảnh nền 2 điểm mốc, vòng bán kính đo/70 %/mục tiêu, 10 quy tắc kiểm tra + bấm để lia tới, lưu một giao dịch, xác nhận cảnh báo ghi audit, xuất PNG | xuất PDF, tờ in tag |
+| F8 Thiết kế khu vực | đặt/kéo tag (Shift bắt lưới), Home, vẽ vùng bay/cấm, sửa đỉnh, thước đo bắt tâm tag, ảnh nền 2 điểm mốc, vòng bán kính đo/70 %/mục tiêu, 10 quy tắc kiểm tra + bấm để lia tới, lưu một giao dịch, xác nhận cảnh báo ghi audit, xuất PNG | xuất PDF |
 
 ## 6. Tình trạng nghiệm thu (bảng 11.3)
 
@@ -117,7 +125,7 @@ ngay, tiến trình ba giai đoạn đẩy qua WebSocket để thanh khẩn cấ
 | A12–A14 | Cần phần cứng (T2/T3) | logic khôi phục shadow sau khởi động lại đã có |
 | A15 | Chức năng có, cần T4 | màn phát lại |
 | A16 | Đạt | `test_a16_each_rule_triggers` (10 mã) + `test_design_save_requires_ack_and_blocks_errors` |
-| A17 | Chưa làm | tờ in tag |
+| A17 | Đạt | `web/src/lib/apriltag36h11.ts` (bảng mã + dựng SVG, đối chiếu pixel với ảnh tham chiếu AprilRobotics/apriltag-imgs) + nút "In tờ tag" ở `TagsPage.tsx` |
 
 ## 7. Việc cho giai đoạn 5 (firmware ESP32) — hợp đồng phía GCS đã sẵn
 

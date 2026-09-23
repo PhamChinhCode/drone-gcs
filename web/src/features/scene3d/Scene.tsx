@@ -2,9 +2,9 @@
 // Dùng chung cho vận hành trực tiếp và phát lại (9.6): chỉ khác bộ đệm + đồng hồ truyền vào.
 import { Suspense, useEffect, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import type { Area, Tag, TagDetect, Waypoint } from "../../lib/types";
+import type { Area, Tag, Waypoint } from "../../lib/types";
 import { CameraRig, type ViewMode } from "./CameraRig";
-import { DroneGroup, FlownTrail, LandingCone, PlannedPath, TagDetectRay, WaypointMarkers, type FrameRef } from "./objects/DroneObjects";
+import { AssumedDrone, DroneGroup, FlownTrail, LandingCone, PlannedPath, RthHome, WaypointMarkers, type FrameRef } from "./objects/DroneObjects";
 import { GroundPlane, NoFlyZone, OperatingArea, TagField } from "./objects/SiteObjects";
 import type { InterpolatedSample, TelemetryBuffer } from "./useTelemetryBuffer";
 
@@ -18,7 +18,6 @@ export interface SceneProps {
   planHighlight?: boolean;
   wpIndex?: number;              // ưu tiên shadow (live); mặc định lấy từ mẫu
   expectedTag?: number | null;
-  tagDetect?: TagDetect | null;
   areaAlert?: boolean;
   failsafe?: boolean;
   highlightTags?: Set<number>;
@@ -73,7 +72,8 @@ export function Scene(p: SceneProps) {
             <FlownTrail buffer={p.buffer} frame={frame} />
             <DroneGroup frame={frame} />
             <LandingCone tag={targetTag} frame={frame} />
-            <TagDetectRay detect={p.tagDetect ?? null} frame={frame} />
+            <RthHome />
+            <AssumedDrone />
             {p.areas.filter((a) => a.enabled && a.vertices.length >= 3).map((a, i) =>
               a.kind === "operating" ? <OperatingArea key={i} area={a} alert={!!p.areaAlert} /> : <NoFlyZone key={i} area={a} />)}
           </group>

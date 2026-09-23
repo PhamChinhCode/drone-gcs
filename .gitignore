@@ -23,3 +23,16 @@ secrets/
 .vscode/
 .idea/
 *.tsbuildinfo
+
+# Ma SINH RA tu drone_gcs.xml (24 nghin dong) — khong phai nguon.
+# Sinh lai: .venv\Scripts\python -m gcs_backend.link_mav.gen_dialect
+backend/gcs_backend/link_mav/dialect/drone_gcs.py
+
+# File tam cua SQLite (WAL) — di kem *.db, khong co y nghia rieng
+backend/*.db-shm
+backend/*.db-wal
+
+# Build cua frontend / cong cu
+web/node_modules/
+.vite/
+*.tsbuildinfo

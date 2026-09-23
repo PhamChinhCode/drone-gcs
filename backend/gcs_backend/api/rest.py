@@ -9,10 +9,9 @@ import re
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
-from ..link import messages as m
 from ..mission.planner import plan_warnings
 from ..runtime import Runtime
 from .auth import current_user, decode_token, issue_token, require_admin
@@ -116,36 +115,13 @@ class PriorityBody(BaseModel):
     priority: int
 
 
-class SimpleCmdBody(BaseModel):
-    action: Literal["ARM", "DISARM", "TAKEOFF", "LAND", "HOLD", "PRECISION_LAND", "RTH"]
-    param: float | None = None
-
-
-class GotoBody(BaseModel):
-    ref_frame: Literal["MAP_NED", "TAG_RELATIVE", "BODY_RELATIVE"]
-    ref_tag_id: int | None = None
-    x: float
-    y: float
-    z: float
-    yaw: float | None = None
-    max_vel: float = Field(default=2.0, gt=0, le=15)
-    climb_first: bool = False
-
-
 class EmergencyBody(BaseModel):
-    action: Literal["RTH", "LAND_NOW", "HOLD", "ABORT_MISSION", "KILL"]
-    confirm_token: str | None = None
-
-
-class LinkConfigBody(BaseModel):
-    channel: int = Field(ge=1, le=14)
-    lr_mode: bool = False
-    peer_mac: str = Field(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+    """Bốn lệnh khẩn của giao ước 4.2. ARM, TAKEOFF, GOTO, HOLD không thuộc kênh này (9.3)."""
+    action: Literal["RTH", "LAND", "DISARM", "ABORT_MISSION"]
 
 
 class ConfigBody(BaseModel):
     values: dict[str, float]
-    push_to_drone: bool = False
 
 
 class UserBody(BaseModel):
@@ -221,9 +197,17 @@ async def delete_tag(pk: int, r: Runtime = Depends(rt), user: dict = Depends(req
     return {"map": r.map_status()}
 
 
-@router.post("/tags/sync")
-async def sync_tags(r: Runtime = Depends(rt), user: dict = Depends(require_admin)):
-    return await r.sync_tags(user)
+@router.get("/tags/export")
+async def export_tags(r: Runtime = Depends(rt), user: dict = Depends(require_admin)):
+    """tags.yaml để chép sang Pi. Bản đồ tag KHÔNG nạp qua dây; trên dây chỉ so tagmap_crc (8.6)."""
+    return Response(r.export_tags_yaml(user), media_type="application/x-yaml",
+                    headers={"Content-Disposition": 'attachment; filename="tags.yaml"'})
+
+
+@router.post("/tags/upload")
+async def upload_tags(r: Runtime = Depends(rt), user: dict = Depends(require_admin)):
+    """Nạp bản đồ tag qua dây (giao ước 8.7, P31) — thay cho `/tags/export` + chép tay."""
+    return await r.upload_tagmap(user)
 
 
 @router.post("/tags/teach/{pk}")
@@ -391,19 +375,9 @@ async def mission_report(mission_id: int, r: Runtime = Depends(rt), _: dict = De
 
 # ─────────────────────────── lệnh ─────────────────────────────────────────────────────────────
 
-@router.post("/commands/simple")
-async def cmd_simple(body: SimpleCmdBody, r: Runtime = Depends(rt), user: dict = Depends(current_user)):
-    return await r.cmd_simple(body.action, body.param, user)
-
-
-@router.post("/commands/goto")
-async def cmd_goto(body: GotoBody, r: Runtime = Depends(rt), user: dict = Depends(current_user)):
-    return await r.cmd_goto(body.model_dump(), user)
-
-
 @router.post("/commands/emergency")
 async def cmd_emergency(body: EmergencyBody, r: Runtime = Depends(rt), user: dict = Depends(current_user)):
-    return await r.cmd_emergency(body.action, body.confirm_token, user)
+    return await r.cmd_emergency(body.action, user)
 
 
 @router.post("/commands/{cmd_id}/cancel")
@@ -430,12 +404,6 @@ async def link_history(since_s: float = 3600, r: Runtime = Depends(rt), _: dict 
     return r.db.link_stats(r.settings.drone_id, since_s)
 
 
-@router.post("/link/config")
-async def link_config(body: LinkConfigBody, r: Runtime = Depends(rt), user: dict = Depends(require_admin)):
-    mac = bytes(int(x, 16) for x in body.peer_mac.split(":"))
-    await r.link.send_dongle(m.DongleConfig(body.channel, int(body.lr_mode), mac))
-    r.db.audit(user["id"], "link.config", None, body.model_dump())
-    return {"ok": True, "note": "đã gửi DONGLE_CONFIG (chan 0x02); LR mode phải bật CẢ HAI đầu"}
 
 
 @router.get("/config")
@@ -453,25 +421,22 @@ async def put_config(body: ConfigBody, r: Runtime = Depends(rt), user: dict = De
         r.db.set_config(k, f"{v:g}", user["id"])
     r.db.audit(user["id"], "config.update", None, body.model_dump())
     r.reload_thresholds()
-    if body.push_to_drone:
-        for k, v in body.values.items():
-            await r.push_config(k, v)
-    if r.link.link_state() == "ok":
-        r.config_checker.request()
-    else:
-        r.monitor.set_drift(r.config_checker.drift())
+    # Không đẩy xuống drone: PARAM_SET bị Pi bỏ qua, ngưỡng chỉ sửa ở safety.yaml (9.4). Bảng này là
+    # gương của safety.yaml để ĐỐI CHIẾU, không phải nguồn.
+    r.monitor.set_drift(r.config_drift())
     return r.db.get_config()
 
 
 @router.get("/config/drift")
 async def config_drift(r: Runtime = Depends(rt), _: dict = Depends(current_user)):
-    return {"drift": r.config_checker.drift(), "config": r.db.get_config()}
+    return {"drift": r.config_drift(), "config": r.db.get_config()}
 
 
 @router.post("/config/check")
 async def config_check(r: Runtime = Depends(rt), _: dict = Depends(current_user)):
-    r.config_checker.request()
-    return {"ok": True}
+    """Đọc lại 8 tham số của Pi (PARAM_REQUEST_LIST) rồi so với bảng system_config."""
+    await r._refresh_params()
+    return {"drift": r.config_drift()}
 
 
 @router.get("/alerts")

@@ -16,9 +16,9 @@ export interface Sample {
   ned: [number, number, number];
   att: [number, number, number];    // độ
   fsm: number;
-  flags: number;
+  /** mẫu này là một bước nhảy do odom neo lại — KHÔNG nội suy từ mẫu trước sang (5.2b ý 3) */
+  jump: boolean;
   wp: number;
-  batt: number;
 }
 
 export interface InterpolatedSample extends Sample {
@@ -26,9 +26,9 @@ export interface InterpolatedSample extends Sample {
   ageMs: number;
 }
 
-export function makeSample(t: number, ned: [number, number, number], att: [number, number, number], fsm: number, flags: number, wp: number, batt: number): Sample {
+export function makeSample(t: number, ned: [number, number, number], att: [number, number, number], fsm: number, jump: boolean, wp: number): Sample {
   return {
-    t, ned, att, fsm, flags, wp, batt,
+    t, ned, att, fsm, jump, wp,
     pos: nedToThree(ned[0], ned[1], ned[2]),
     quat: attitudeToThree(deg(att[0]), deg(att[1]), deg(att[2])),
   };
@@ -93,12 +93,14 @@ export class TelemetryBuffer {
     else {
       a = b[i]; bb = b[i + 1];
       k = (t - a.t) / (bb.t - a.t);
-      if (bb.t - a.t > 1000) k = 0; // khoảng trống lớn (mất gói dài) → không nội suy xuyên qua
+      // khoảng trống lớn (mất gói dài), hoặc mẫu sau là bước nhảy khi odom neo: giữ nguyên mẫu trước
+      // rồi nhảy thẳng, đừng vẽ drone trượt qua quãng nó chưa từng bay
+      if (bb.t - a.t > 1000 || bb.jump) k = 0;
     }
     o.t = t;
     o.pos.copy(a.pos).lerp(bb.pos, k);
     o.quat.copy(a.quat).slerp(bb.quat, k);
-    o.ned = a.ned; o.att = a.att; o.fsm = a.fsm; o.flags = a.flags; o.wp = a.wp; o.batt = a.batt;
+    o.ned = a.ned; o.att = a.att; o.fsm = a.fsm; o.jump = a.jump; o.wp = a.wp;
     o.stale = ageMs > STALE_MS;
     o.ageMs = ageMs;
     return o;

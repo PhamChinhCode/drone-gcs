@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { makeSample, TelemetryBuffer } from "./useTelemetryBuffer";
 
-const s = (t: number, n: number) => makeSample(t, [n, 0, -5], [0, 0, 0], 2, 1, 0, 90);
+const s = (t: number, n: number) => makeSample(t, [n, 0, -5], [0, 0, 0], 2, false, 0);
 
 describe("TelemetryBuffer", () => {
   it("nội suy giữa hai mẫu với trễ dựng hình", () => {

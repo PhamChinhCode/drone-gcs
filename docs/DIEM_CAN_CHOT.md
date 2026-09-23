@@ -1,5 +1,13 @@
 # Điểm cần chốt với đội firmware ESP32 và đội Pi 4
 
+> **LỖI THỜI từ 17/09/2026.** Tài liệu này mô tả kênh ESP-NOW (dongle ESP32, khung COBS + CRC16 + HMAC,
+> 27 bản tin tự định nghĩa). Kênh đó **đã bị thay** bằng MAVLink 2 / UDP theo
+> [GIAO_UOC_GCS_PI.md](GIAO_UOC_GCS_PI.md). Giữ lại làm lịch sử và vì các mục không thuộc tầng liên kết
+> (thiết kế khu vực, cảnh báo, phát lại, quyền người dùng, CSDL) **vẫn đúng**.
+> Xem [KE_HOACH_CHUYEN_MAVLINK.md](KE_HOACH_CHUYEN_MAVLINK.md) để biết mục nào đã thay bằng gì.
+
+**Toàn bộ tài liệu này đã lỗi thời**: mọi điểm cần chốt ở đây đều thuộc kênh ESP-NOW, và đã được giao ước GCS ↔ Pi trả lời hoặc thay thế.
+
 *Cập nhật 14/09/2026. Tài liệu gốc: [thiet_ke_gcs_espnow_3d.md](thiet_ke_gcs_espnow_3d.md).*
 
 Đặc tả gốc chỉ cho **byte-by-byte** 7 bản tin (TELEM_FAST, TELEM_SLOW, MISSION_WP, CMD_GOTO, EMERGENCY,
