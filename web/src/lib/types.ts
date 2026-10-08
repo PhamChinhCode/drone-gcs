@@ -123,7 +123,7 @@ export const FSM_LABELS: Record<number, string> = {
   0: "Chờ lệnh", 1: "Cất cánh", 2: "Đang bay", 3: "Tìm marker", 4: "Hạ chính xác",
   5: "Gắp / thả", 6: "Chờ thử lại", 7: "Về nhà (RTH)", 8: "Đang hạ cánh",
   9: "Xong nhiệm vụ", 10: "Sự cố",
-  11: "Quay mũi về đích", 12: "Căn hướng bãi", 13: "Hạ theo tag nhỏ",
+  11: "Quay mũi về đích", 12: "Tiếp cận thẳng hàng", 13: "Hạ theo tag nhỏ",
 };
 
 export const FSM = { IDLE: 0, TAKEOFF: 1, ENROUTE: 2, MARKER_SEARCH: 3, PRECISION_LAND: 4, ACTUATE_GRIPPER: 5, RETRY_LOITER: 6, RTH: 7, EMERGENCY_LAND: 8, MISSION_COMPLETE: 9, FAILSAFE: 10, ALIGN_HEADING: 11, PAD_ALIGN: 12, FINAL_APPROACH: 13 } as const;
