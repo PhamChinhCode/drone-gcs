@@ -17,10 +17,11 @@ def test_sap_theo_tag_id_tang_dan_va_bo_qua_tag_tat():
 
 def test_toa_do_doi_dung_mm_va_lam_tron():
     items = build_items([{"tag_id": 5, "pos_n_m": 0.1229, "pos_e_m": -1.5, "pos_d_m": 0.0015}])
-    seq, tag_id, n_mm, e_mm, d_mm = items[0]
+    seq, tag_id, n_mm, e_mm, d_mm, yaw_valid, yaw_cdeg = items[0]
     # round() cua Python lam tron NUA VE SO CHAN: 0,1229 -> 123 mm (khong phai 122 nhu int()
     # se cat), va 1,5 -> 2 (chan gan nhat khi dung giua).
     assert (tag_id, n_mm, e_mm, d_mm) == (5, 123, -1500, 2)
+    assert (yaw_valid, yaw_cdeg) == (0, 0)             # khong khai yaw_valid -> khong gui huong (0.8)
 
 
 def test_dong_bo_voi_tagmap_crc():

@@ -66,7 +66,8 @@ export interface MapStatus { gcs_crc: number; drone_crc: number | null; in_sync:
 export type TagKind = "home" | "pickup" | "dropoff" | "waypoint";
 export interface Tag {
   id?: number; site_id?: number; tag_id: number; label: string; pos_n_m: number; pos_e_m: number; pos_d_m: number;
-  yaw_deg: number; tag_size_m: number; kind: TagKind; landing_tol_m: number; enabled: boolean; notes?: string | null;
+  yaw_deg: number; yaw_valid: boolean; tag_size_m: number; kind: TagKind; landing_tol_m: number; enabled: boolean;
+  notes?: string | null;
 }
 
 export interface Area {
@@ -114,16 +115,18 @@ export interface TelemetryRow {
 }
 
 export const FSM_NAMES = ["IDLE", "TAKEOFF", "ENROUTE", "MARKER_SEARCH", "PRECISION_LAND", "ACTUATE_GRIPPER",
-  "RETRY_LOITER", "RTH", "EMERGENCY_LAND", "MISSION_COMPLETE", "FAILSAFE"];
+  "RETRY_LOITER", "RTH", "EMERGENCY_LAND", "MISSION_COMPLETE", "FAILSAFE",
+  "ALIGN_HEADING", "PAD_ALIGN", "FINAL_APPROACH"];  // 11–13: giao ước 0.8
 
 /** Nhãn hiển thị: giá trị 8 KHÔNG được hiện "khẩn cấp" khi failsafe_type = 0 (8.5). */
 export const FSM_LABELS: Record<number, string> = {
   0: "Chờ lệnh", 1: "Cất cánh", 2: "Đang bay", 3: "Tìm marker", 4: "Hạ chính xác",
   5: "Gắp / thả", 6: "Chờ thử lại", 7: "Về nhà (RTH)", 8: "Đang hạ cánh",
   9: "Xong nhiệm vụ", 10: "Sự cố",
+  11: "Quay mũi về đích", 12: "Căn hướng bãi", 13: "Hạ theo tag nhỏ",
 };
 
-export const FSM = { IDLE: 0, TAKEOFF: 1, ENROUTE: 2, MARKER_SEARCH: 3, PRECISION_LAND: 4, ACTUATE_GRIPPER: 5, RETRY_LOITER: 6, RTH: 7, EMERGENCY_LAND: 8, MISSION_COMPLETE: 9, FAILSAFE: 10 } as const;
+export const FSM = { IDLE: 0, TAKEOFF: 1, ENROUTE: 2, MARKER_SEARCH: 3, PRECISION_LAND: 4, ACTUATE_GRIPPER: 5, RETRY_LOITER: 6, RTH: 7, EMERGENCY_LAND: 8, MISSION_COMPLETE: 9, FAILSAFE: 10, ALIGN_HEADING: 11, PAD_ALIGN: 12, FINAL_APPROACH: 13 } as const;
 
 export const GRIPPER_NAMES = ["MỞ", "ĐANG GIỮ", "ĐANG CHẠY", "LỖI"];
 

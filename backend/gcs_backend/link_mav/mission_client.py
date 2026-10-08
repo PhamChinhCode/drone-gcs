@@ -25,7 +25,7 @@ from .dialect import drone_gcs as mav
 
 log = logging.getLogger(__name__)
 
-CONTRACT_VER = 700  # bản 0.7 — MAJOR*10000 + MINOR*100 (giao ước 6.2)
+CONTRACT_VER = 800  # bản 0.8 — MAJOR*10000 + MINOR*100 (giao ước 6.2)
 SILENCE_TIMEOUT_S = 20.0  # Pi hỏi lại mỗi 1 s tối đa 5 lần; im lặng lâu hơn thế là đường truyền chết
 
 

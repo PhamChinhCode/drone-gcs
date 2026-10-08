@@ -135,7 +135,7 @@ export function SiteDesignPage() {
       case "tag": {
         if (!admin) return;
         const nextId = Math.max(-1, ...draft.tags.map((t) => t.tag_id)) + 1;
-        setNewTag({ tag_id: nextId, label: "", pos_n_m: snap(n, ev.shiftKey), pos_e_m: snap(e, ev.shiftKey), pos_d_m: 0, yaw_deg: 0, tag_size_m: draft.tags[0]?.tag_size_m ?? 0.3, kind: "pickup", landing_tol_m: 0.3, enabled: true });
+        setNewTag({ tag_id: nextId, label: "", pos_n_m: snap(n, ev.shiftKey), pos_e_m: snap(e, ev.shiftKey), pos_d_m: 0, yaw_deg: 0, yaw_valid: false, tag_size_m: draft.tags[0]?.tag_size_m ?? 0.3, kind: "pickup", landing_tol_m: 0.3, enabled: true });
         return;
       }
       case "home": {

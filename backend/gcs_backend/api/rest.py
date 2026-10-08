@@ -37,6 +37,7 @@ class TagBody(BaseModel):
     pos_e_m: float
     pos_d_m: float = 0.0
     yaw_deg: float = 0.0
+    yaw_valid: bool = False     # 0.8: yaw_deg là hướng đã đo, gửi cho Pi (8.7)
     tag_size_m: float = Field(gt=0)
     kind: Literal["home", "pickup", "dropoff", "waypoint"]
     landing_tol_m: float = 0.3
@@ -52,6 +53,7 @@ class TagPatch(BaseModel):
     pos_e_m: float | None = None
     pos_d_m: float | None = None
     yaw_deg: float | None = None
+    yaw_valid: bool | None = None
     tag_size_m: float | None = Field(default=None, gt=0)
     kind: Literal["home", "pickup", "dropoff", "waypoint"] | None = None
     landing_tol_m: float | None = None

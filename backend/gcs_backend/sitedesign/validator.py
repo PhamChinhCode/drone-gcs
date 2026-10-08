@@ -36,6 +36,14 @@ def validate_design(design: dict) -> list[dict]:
         else:
             seen[tid] = t
 
+    # E_RESERVED_TAG (giao ước 0.8, 8.7): 10–19 là tag nhỏ Pi tự suy từ tag to — Pi từ chối cả bản đồ
+    for t in all_tags:
+        tid = int(t["tag_id"])
+        if 10 <= tid <= 19:
+            issues.append(_issue("E_RESERVED_TAG", "error", f"tag_id {tid} thuộc dải 10–19 dành cho tag nhỏ "
+                                 f"của bãi (Pi tự suy, id = id tag to + 10) — hãy đổi ID",
+                                 [{"type": "tag", "tag_id": tid}], [t["pos_n_m"], t["pos_e_m"]]))
+
     # E_NO_HOME
     homes = [t for t in tags if t.get("kind") == "home"]
     if not homes:

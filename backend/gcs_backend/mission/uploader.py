@@ -14,6 +14,7 @@ import re
 
 from ..link_mav.dialect import drone_gcs as mav
 from ..link_mav.mission_client import Waypoint, to_ascii
+from ..link_mav.tagmap import yaw_cdeg
 
 ACTION = {"none": mav.DRONE_ACTION_NONE, "pickup": mav.DRONE_ACTION_PICKUP,
           "dropoff": mav.DRONE_ACTION_DROPOFF}
@@ -80,6 +81,10 @@ def tags_yaml(tags: list[dict], origin: dict | None = None) -> str:
         pad = " " * len("    known_tags: [")
         lines.append("    known_tags: [" + f"\n{pad}".join(body) + "]")
         lines.append("    tag_frames: [" + ", ".join(frame_name(t) for t in rows) + "]")
+        # 0.8: hướng tag ĐÃ ĐO [id, độ, ...] — cùng quy ước trên dây (từ N bản đồ, chiều kim đồng hồ),
+        # cùng phép làm tròn cdeg với tagmap_crc để Pi đọc lại ra đúng CRC.
+        yaws = [f"{t['tag_id']:.1f}, {yaw_cdeg(t['yaw_deg']) / 100:.2f}" for t in rows if t.get("yaw_valid")]
+        lines.append("    known_tags_heading: [" + ", ".join(yaws) + "]")
     else:
         lines.append("    known_tags: []")
         lines.append("    tag_frames: []")

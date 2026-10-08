@@ -18,7 +18,8 @@ function buildPrintSheet(tags: Tag[]): string {
   const bad = toPrint.filter((t) => t.tag_id > TAG36H11_MAX_ID);
   const cards = ok.map((t) => {
     const sizeMm = t.tag_size_m * 1000;
-    return `<div class="card">${tag36h11Svg(t.tag_id, sizeMm)}` +
+    // Mũi tên "TRÊN": hướng bãi (yaw_deg) là hướng của mép này — đặt tờ in đúng chiều (giao ước 0.8, 8.6).
+    return `<div class="card"><div class="up">▲ TRÊN</div>${tag36h11Svg(t.tag_id, sizeMm)}` +
       `<div class="label">tag_id ${t.tag_id} — ${escapeHtml(t.label)}<br/>${t.kind} — cạnh đen ${sizeMm.toFixed(0)} mm</div></div>`;
   }).join("");
   const warn = bad.length
@@ -33,6 +34,7 @@ body { font-family: sans-serif; margin: 10mm; }
 .cards { display: flex; flex-wrap: wrap; gap: 8mm; }
 .card { break-inside: avoid; text-align: center; }
 .label { font-size: 10px; margin-top: 2mm; }
+.up { font-size: 10px; margin-bottom: 1mm; }
 @media print { .note { display: none; } }
 </style></head><body>
 <p class="note"><b>Trước khi in:</b> trong hộp thoại in, đặt Tỷ lệ = "Không" / "Actual size" — <b>KHÔNG</b> chọn
@@ -46,7 +48,7 @@ ${warn}
 </body></html>`;
 }
 
-const EMPTY: Tag = { tag_id: 0, label: "", pos_n_m: 0, pos_e_m: 0, pos_d_m: 0, yaw_deg: 0, tag_size_m: 0.3, kind: "pickup", landing_tol_m: 0.3, enabled: true };
+const EMPTY: Tag = { tag_id: 0, label: "", pos_n_m: 0, pos_e_m: 0, pos_d_m: 0, yaw_deg: 0, yaw_valid: false, tag_size_m: 0.3, kind: "pickup", landing_tol_m: 0.3, enabled: true };
 
 export function TagsPage() {
   const { tags, issues, load } = useSite();
@@ -117,7 +119,7 @@ export function TagsPage() {
         <h3>Danh sách tag</h3>
         <div className="table-wrap">
           <table className="grid">
-            <thead><tr><th>ID</th><th>Nhãn</th><th>Loại</th><th>N (m)</th><th>E (m)</th><th>D (m)</th><th>Yaw°</th><th>Cỡ in (m)</th><th>Dung sai (m)</th><th>Bật</th><th /></tr></thead>
+            <thead><tr><th>ID</th><th>Nhãn</th><th>Loại</th><th>N (m)</th><th>E (m)</th><th>D (m)</th><th title="Hướng mép TRÊN của tag, độ từ trục N bản đồ, chiều kim đồng hồ">Hướng°</th><th title="Đã đo hướng ngoài thực địa — chỉ khi đánh dấu, drone mới quay mũi theo hướng bãi và dùng tag nhỏ (giao ước 0.8)">Đã đo</th><th>Cỡ in (m)</th><th>Dung sai (m)</th><th>Bật</th><th /></tr></thead>
             <tbody>
               {tags.map((t0) => {
                 const t = edit[t0.id!] ?? t0;
@@ -127,7 +129,9 @@ export function TagsPage() {
                   <tr key={t0.id}>
                     <td>{field(t, "tag_id", set)}</td><td>{field(t, "label", set, "text")}</td><td>{kindSel(t, set)}</td>
                     <td>{field(t, "pos_n_m", set)}</td><td>{field(t, "pos_e_m", set)}</td><td>{field(t, "pos_d_m", set)}</td>
-                    <td>{field(t, "yaw_deg", set)}</td><td>{field(t, "tag_size_m", set)}</td><td>{field(t, "landing_tol_m", set)}</td>
+                    <td>{field(t, "yaw_deg", set)}</td>
+                    <td><input type="checkbox" checked={t.yaw_valid} disabled={!admin} onChange={(e) => set({ ...t, yaw_valid: e.target.checked })} /></td>
+                    <td>{field(t, "tag_size_m", set)}</td><td>{field(t, "landing_tol_m", set)}</td>
                     <td><input type="checkbox" checked={t.enabled} disabled={!admin} onChange={(e) => set({ ...t, enabled: e.target.checked })} /></td>
                     <td className="nowrap">
                       {admin && dirty && <button onClick={() => run(async () => { const { id: _i, site_id: _s, ...body } = t; await put(`/api/tags/${t0.id}`, body); const n = { ...edit }; delete n[t0.id!]; setEdit(n); })}>Lưu</button>}
@@ -141,7 +145,9 @@ export function TagsPage() {
                 <tr className="new-row">
                   <td>{field(draft, "tag_id", setDraft)}</td><td>{field(draft, "label", setDraft, "text")}</td><td>{kindSel(draft, setDraft)}</td>
                   <td>{field(draft, "pos_n_m", setDraft)}</td><td>{field(draft, "pos_e_m", setDraft)}</td><td>{field(draft, "pos_d_m", setDraft)}</td>
-                  <td>{field(draft, "yaw_deg", setDraft)}</td><td>{field(draft, "tag_size_m", setDraft)}</td><td>{field(draft, "landing_tol_m", setDraft)}</td>
+                  <td>{field(draft, "yaw_deg", setDraft)}</td>
+                  <td><input type="checkbox" checked={draft.yaw_valid} onChange={(e) => setDraft({ ...draft, yaw_valid: e.target.checked })} /></td>
+                  <td>{field(draft, "tag_size_m", setDraft)}</td><td>{field(draft, "landing_tol_m", setDraft)}</td>
                   <td />
                   <td><button className="primary" disabled={!draft.label} onClick={() => run(async () => { await post("/api/tags", draft); setDraft({ ...EMPTY, tag_id: draft.tag_id + 1 }); })}>Thêm</button></td>
                 </tr>

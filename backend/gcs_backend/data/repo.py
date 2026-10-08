@@ -9,7 +9,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import create_engine, delete, event, select
+from sqlalchemy import create_engine, delete, event, inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from .models import (AppUser, AuditLog, Base, Drone, LinkStatRow, Mission, MissionEvent, MissionWaypoint, Site,
@@ -27,8 +27,9 @@ DEFAULT_CONFIG = {
     "acceptance_radius_m": "1.5",
 }
 
-TAG_FIELDS = ("tag_id", "label", "pos_n_m", "pos_e_m", "pos_d_m", "yaw_deg", "tag_size_m", "kind", "landing_tol_m",
-              "enabled", "notes")
+TAG_FIELDS = ("tag_id", "label", "pos_n_m", "pos_e_m", "pos_d_m", "yaw_deg", "yaw_valid", "tag_size_m", "kind",
+              "landing_tol_m", "enabled", "notes")
+TAG_BOOL_FIELDS = ("enabled", "yaw_valid")      # lưu Integer 0/1, API trả bool
 SITE_FIELDS = ("name", "origin_lat", "origin_lon", "origin_alt_m", "yaw_offset_deg", "design_radius_m",
                "link_radius_meas_m", "cruise_alt_default_m", "gcs_pos_n_m", "gcs_pos_e_m", "bg_image_path",
                "bg_anchor_json")
@@ -60,7 +61,9 @@ def _iso(dt: datetime | None) -> str | None:
 
 def tag_dict(t: TagPoint) -> dict:
     d = {k: getattr(t, k) for k in TAG_FIELDS}
-    d["id"], d["site_id"], d["enabled"] = t.id, t.site_id, bool(t.enabled)
+    d["id"], d["site_id"] = t.id, t.site_id
+    for k in TAG_BOOL_FIELDS:
+        d[k] = bool(d[k])
     return d
 
 
@@ -111,6 +114,7 @@ class Database:
 
     def init(self, settings) -> None:
         Base.metadata.create_all(self.engine)
+        self._add_missing_columns()
         with self.s() as s, s.begin():
             if s.scalar(select(AppUser).limit(1)) is None:
                 s.add(AppUser(username=settings.admin_user, password_hash=hash_password(settings.admin_password),
@@ -127,6 +131,13 @@ class Database:
                     s.add(SystemConfig(key=k, value=v))
             if s.get(Site, settings.site_id) is None:
                 self._seed_demo_site(s, settings.site_id)
+
+    def _add_missing_columns(self) -> None:
+        """create_all không thêm cột vào bảng đã có — CSDL cũ thiếu cột mới thì thêm tay (chưa dùng alembic)."""
+        cols = {c["name"] for c in inspect(self.engine).get_columns("tag_point")}
+        if "yaw_valid" not in cols:   # giao ước 0.8
+            with self.engine.begin() as conn:
+                conn.execute(text("ALTER TABLE tag_point ADD COLUMN yaw_valid INTEGER NOT NULL DEFAULT 0"))
 
     @staticmethod
     def _seed_demo_site(s: Session, site_id: int) -> None:
@@ -232,7 +243,7 @@ class Database:
                 self._demote_home(s, t.site_id, pk)
             for k in TAG_FIELDS:
                 if k in data:
-                    setattr(t, k, int(data[k]) if k == "enabled" else data[k])
+                    setattr(t, k, int(data[k]) if k in TAG_BOOL_FIELDS else data[k])
             s.flush()
             return tag_dict(t)
 
@@ -293,7 +304,7 @@ class Database:
             s.execute(delete(TagPoint).where(TagPoint.site_id == site_id))
             s.flush()
             for t in design["tags"]:
-                s.add(TagPoint(site_id=site_id, **{k: (int(t[k]) if k == "enabled" else t[k])
+                s.add(TagPoint(site_id=site_id, **{k: (int(t[k]) if k in TAG_BOOL_FIELDS else t[k])
                                                    for k in TAG_FIELDS if k in t}))
             self._replace_areas(s, site_id, design["areas"])
         return self.get_design(site_id)  # type: ignore[return-value]

@@ -15,7 +15,7 @@ import logging
 from dataclasses import dataclass, field
 
 from .dialect import drone_gcs as mav
-from .tagmap import origin_ints, tagmap_crc
+from .tagmap import origin_ints, tagmap_crc, yaw_cdeg
 
 log = logging.getLogger(__name__)
 
@@ -23,15 +23,17 @@ SO_TAG_TOI_DA = 32           # muc 8.7
 SILENCE_TIMEOUT_S = 20.0     # Pi hoi lai moi 1 s toi da 5 lan; im lang lau hon the la duong truyen chet
 
 
-def build_items(tags: list[dict]) -> list[tuple[int, int, int, int, int]]:
-    """[{tag_id, pos_n_m, pos_e_m, pos_d_m?, enabled?}, ...] -> [(seq, tag_id, n_mm, e_mm, d_mm), ...].
+def build_items(tags: list[dict]) -> list[tuple[int, int, int, int, int, int, int]]:
+    """[{tag_id, pos_n_m, pos_e_m, pos_d_m?, yaw_deg?, yaw_valid?, enabled?}, ...]
+    -> [(seq, tag_id, n_mm, e_mm, d_mm, yaw_valid, yaw_cdeg), ...].
 
     Cùng thứ tự (sắp theo `tag_id` tăng dần, chỉ tag `enabled`) và cùng phép làm tròn với
     `tagmap_crc()` — hai hàm phải luôn đồng bộ nên đọc chung một nguồn `tags`.
     """
     rows = sorted((t for t in tags if t.get("enabled", True)), key=lambda t: int(t["tag_id"]))
     return [(seq, int(t["tag_id"]), round(t["pos_n_m"] * 1000), round(t["pos_e_m"] * 1000),
-             round(t.get("pos_d_m", 0.0) * 1000)) for seq, t in enumerate(rows)]
+             round(t.get("pos_d_m", 0.0) * 1000), 1 if t.get("yaw_valid") else 0,
+             yaw_cdeg(t["yaw_deg"]) if t.get("yaw_valid") else 0) for seq, t in enumerate(rows)]
 
 
 @dataclass(frozen=True)
@@ -103,10 +105,11 @@ class TagmapClient:
             if self._active is up:
                 self._active = None
 
-    def _send_item(self, crc: int, item: tuple[int, int, int, int, int]) -> None:
-        seq, tag_id, n_mm, e_mm, d_mm = item
+    def _send_item(self, crc: int, item: tuple[int, int, int, int, int, int, int]) -> None:
+        seq, tag_id, n_mm, e_mm, d_mm, yaw_valid, yaw = item
         self.link.send(mav.MAVLink_drone_tagmap_item_message(
-            tagmap_crc=crc, tag_id=tag_id, n_mm=n_mm, e_mm=e_mm, d_mm=d_mm, seq=seq))
+            tagmap_crc=crc, tag_id=tag_id, n_mm=n_mm, e_mm=e_mm, d_mm=d_mm, seq=seq,
+            yaw_valid=yaw_valid, yaw_cdeg=yaw))
 
 
 def _text(raw) -> str:

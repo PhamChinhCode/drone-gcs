@@ -78,6 +78,9 @@ class TagPoint(Base):
     pos_e_m: Mapped[float] = mapped_column(Float)
     pos_d_m: Mapped[float] = mapped_column(Float, default=0.0)
     yaw_deg: Mapped[float] = mapped_column(Float, default=0.0)
+    # 1 = yaw_deg là hướng ĐÃ ĐO của tag (giao ước 0.8, 8.7): Pi quay mũi theo nó khi hạ cánh và suy vị
+    # trí tag nhỏ từ nó. 0 = chỉ để vẽ, không gửi — mặc định 0 vì yaw_deg = 0 cũ chưa ai đo.
+    yaw_valid: Mapped[int] = mapped_column(Integer, default=0)
     tag_size_m: Mapped[float] = mapped_column(Float)
     kind: Mapped[str] = mapped_column(Text)
     landing_tol_m: Mapped[float] = mapped_column(Float, default=0.3)
