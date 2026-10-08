@@ -7,6 +7,7 @@ import { hex8 } from "../../lib/units";
 import { useIsAdmin } from "../../store/auth";
 import { useLive } from "../../store/live";
 import { useSite } from "../../store/site";
+import { buildPadSheet } from "./padSheet";
 
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
@@ -79,6 +80,12 @@ export function TagsPage() {
     const blob = new Blob([buildPrintSheet(tags)], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank");
+  };
+
+  const printPads = () => {
+    if (!tags.some((t) => t.enabled)) { setErr("Không có tag nào đang bật để in"); return; }
+    setErr(null); setOk(null);
+    window.open(URL.createObjectURL(new Blob([buildPadSheet(tags)], { type: "text/html" })), "_blank");
   };
 
   const field = (t: Tag, k: keyof Tag, onChange: (t: Tag) => void, type: "num" | "text" = "num") => (
@@ -158,6 +165,10 @@ export function TagsPage() {
         <div className="sync-row">
           <button onClick={printSheet}>In tờ tag (đúng kích thước)</button>
           <span className="muted small">Mở trang HTML ở tab mới — in ở tỷ lệ 100%, không "Vừa trang". Chỉ in tag đang Bật.</span>
+        </div>
+        <div className="sync-row">
+          <button onClick={printPads}>In bãi đáp (A3)</button>
+          <span className="muted small">Mỗi bãi một trang A3 dọc: tag to + tag nhỏ (id + 10, 100 mm) phía TRÊN, tâm cách 220 mm — đúng mẫu Pi tự suy (giao ước 0.8). Chỉ tag 0–9 đang Bật.</span>
         </div>
       </div>
     </div>
