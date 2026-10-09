@@ -1,11 +1,11 @@
 // Tờ in BÃI ĐÁP khổ A3 dọc: tag to (tâm bãi) + tag nhỏ phía TRÊN, cùng chiều, đúng khoảng cách.
 // Mẫu tag nhỏ phải trùng mẫu Pi tự suy (giao ước GCS <-> Pi 0.8 mục 8.7, tags.yaml pad_small_tag_*):
-// id = id tag to + 10, cạnh 100 mm, tâm cách tâm tag to 220 mm về phía mép TRÊN. Đổi mẫu thì sửa cả
+// id = id tag to + 10, cạnh 100 mm, tâm cách tâm tag to 210 mm về phía mép TRÊN (220 -> 210, 10-09). Đổi mẫu thì sửa cả
 // tags.yaml phía Pi, không thì Pi đặt tag nhỏ sai chỗ so với tờ in.
 import { TAG36H11_MAX_ID, tag36h11Grid } from "../../lib/apriltag36h11";
 import type { Tag } from "../../lib/types";
 
-const PAD_SMALL = { idOffset: 10, sizeMm: 100, forwardMm: 220 };
+const PAD_SMALL = { idOffset: 10, sizeMm: 100, forwardMm: 210 };
 const PAGE_W = 297, PAGE_H = 420;   // A3 dọc (mm)
 const PRINT_MARGIN = 5;             // lề máy in không in tới được
 const BORDER_CELLS = 8;             // cạnh đen 36h11 = 8 ô (lib/apriltag36h11)
@@ -36,6 +36,7 @@ function buildPad(t: Tag): Pad {
   }
   const cx = PAGE_W / 2;
   const smallTop = PRINT_MARGIN + cellS;               // đủ viền trắng 1 ô phía trên tag nhỏ
+  // F = 210 mm (10-09): tag to cách mép dưới 17,5 mm thay vì 7,5 mm khi F còn 220.
   const bigCy = smallTop + s / 2 + F;
   const bigBottom = bigCy + S / 2;
   if (bigBottom > PAGE_H - PRINT_MARGIN || S > PAGE_W - 2 * PRINT_MARGIN) {

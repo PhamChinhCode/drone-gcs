@@ -168,7 +168,7 @@ export function TagsPage() {
         </div>
         <div className="sync-row">
           <button onClick={printPads}>In bãi đáp (A3)</button>
-          <span className="muted small">Mỗi bãi một trang A3 dọc: tag to + tag nhỏ (id + 10, 100 mm) phía TRÊN, tâm cách 220 mm — đúng mẫu Pi tự suy (giao ước 0.8). Chỉ tag 0–9 đang Bật.</span>
+          <span className="muted small">Mỗi bãi một trang A3 dọc: tag to + tag nhỏ (id + 10, 100 mm) phía TRÊN, tâm cách 210 mm — đúng mẫu Pi tự suy (giao ước 0.8). Chỉ tag 0–9 đang Bật.</span>
         </div>
       </div>
     </div>
