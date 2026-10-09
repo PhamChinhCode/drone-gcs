@@ -10,8 +10,8 @@
 // đường về của nhau), hoặc mỗi drone một cổng UDP.
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { download, errMsg } from "../../lib/api";
-import { FLIGHT_RESULT } from "../../lib/types";
+import { download, errMsg, post } from "../../lib/api";
+import { FLIGHT_RESULT, type Command } from "../../lib/types";
 import { hex8 } from "../../lib/units";
 import { useIsAdmin } from "../../store/auth";
 import { useLive } from "../../store/live";
@@ -31,6 +31,39 @@ function Row({ mark, label, value, note, action }: {
       <td>{value}{note && <div className="muted small">{note}</div>}</td>
       <td className="nowrap">{action}</td>
     </tr>
+  );
+}
+
+const RESTART_STAGE: Record<string, string> = {
+  sending: "đang gửi…", acked: "Pi đã nhận — stack tắt và chạy lại, liên kết mất 20–40 s",
+  rejected: "Pi từ chối (xem cảnh báo: đang arm hoặc chưa IDLE)", failed: "không có ACK", cancelled: "đã hủy",
+};
+
+// Khởi động lại toàn bộ stack ROS trên Pi (giao ước 4.1, lệnh 42101) — vd sau khi nạp bản đồ tag.
+// Pi tự từ chối khi đang arm / FSM không IDLE; nút chỉ khoá sẵn cho đỡ bấm nhầm.
+function RestartStackButton({ canRestart }: { canRestart: boolean }) {
+  const [cmdId, setCmdId] = useState<number | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const cmd: Command | undefined = useLive((s) => (cmdId ? s.commands[cmdId] : undefined));
+  const fire = async () => {
+    if (!window.confirm("Khởi động lại TOÀN BỘ stack ROS trên Pi?\n\nChỉ làm khi drone đang nằm đất, chưa arm. " +
+      "Liên kết với drone sẽ mất khoảng 20–40 giây rồi tự nối lại.")) return;
+    setErr(null);
+    try {
+      const c = await post<Command>("/api/commands/restart_stack", {});
+      useLive.setState((s) => ({ commands: { ...s.commands, [c.id]: c } }));
+      setCmdId(c.id);
+    } catch (e) { setErr(errMsg(e)); }
+  };
+  const stage = cmd?.stage;
+  return (
+    <div className="btn-row">
+      <button disabled={!canRestart || stage === "sending"} onClick={fire}>Khởi động lại stack Pi</button>
+      {(err || stage) && <span className={`small ${err || stage === "rejected" || stage === "failed" ? "error" : "muted"}`}>
+        {err ?? RESTART_STAGE[stage!] ?? stage}
+      </span>}
+      {!canRestart && !stage && <span className="muted small">chỉ khi có liên kết, drone chưa arm và đang IDLE</span>}
+    </div>
   );
 }
 
@@ -83,6 +116,7 @@ export function DronePage() {
             <code> comms.yaml</code> của Pi có trỏ đúng máy này không.
           </p>
         )}
+        {admin && <RestartStackButton canRestart={up && telem?.armed === false && telem?.fsm_state === 0} />}
       </div>
 
       <div className="panel">

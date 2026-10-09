@@ -32,6 +32,9 @@ LAND = mav.MAV_CMD_NAV_LAND                          # 21
 ARM_DISARM = mav.MAV_CMD_COMPONENT_ARM_DISARM        # 400
 ABORT_MISSION = mav.MAV_CMD_DRONE_ABORT_MISSION      # 42100
 PAUSE_CONTINUE = mav.MAV_CMD_DO_PAUSE_CONTINUE       # 193 — Pi trả UNSUPPORTED, GCS ẩn nút (11.P7)
+# Bổ sung 2026-10-09: khởi động lại stack ROS trên Pi. Lệnh THƯỜNG (1,0 s × 3); Pi chỉ nhận khi drone
+# không arm và FSM IDLE, ACK trước rồi mới tắt -> GCS mất liên kết 20–40 s là bình thường.
+RESTART_STACK = mav.MAV_CMD_DRONE_RESTART_STACK      # 42101
 
 EMERGENCY = frozenset({RTH, LAND, ARM_DISARM, ABORT_MISSION})
 DISARM_FORCE = 21196.0  # param2 của lệnh 400: cắt động cơ ở mọi độ cao
@@ -126,3 +129,6 @@ class CommandClient:
 
     async def pause_continue(self, go: bool) -> CommandResult:
         return await self.send(PAUSE_CONTINUE, 1.0 if go else 0.0)
+
+    async def restart_stack(self) -> CommandResult:
+        return await self.send(RESTART_STACK)

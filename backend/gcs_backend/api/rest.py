@@ -382,6 +382,12 @@ async def cmd_emergency(body: EmergencyBody, r: Runtime = Depends(rt), user: dic
     return await r.cmd_emergency(body.action, user)
 
 
+@router.post("/commands/restart_stack")
+async def cmd_restart_stack(r: Runtime = Depends(rt), user: dict = Depends(require_admin)):
+    """Khởi động lại toàn bộ stack ROS trên Pi (giao ước 4.1, lệnh 42101). Chỉ admin."""
+    return await r.cmd_restart_stack(user)
+
+
 @router.post("/commands/{cmd_id}/cancel")
 async def cmd_cancel(cmd_id: int, r: Runtime = Depends(rt), user: dict = Depends(current_user)):
     if not r.cancel_command(cmd_id, user):

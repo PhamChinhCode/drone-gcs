@@ -408,6 +408,17 @@ class Runtime:
         self._cancelable[c.id] = task
         return c.as_dict()
 
+    async def cmd_restart_stack(self, user: dict) -> dict:
+        """Lệnh 42101: khởi động lại stack ROS trên Pi. Pi tự từ chối khi đang arm hoặc FSM không IDLE —
+        GCS không kiểm thay, chỉ chuyển lý do (STATUSTEXT) cho người vận hành."""
+        c = self.tracker.new("maintenance", "RESTART_STACK", user["id"])
+        self.db.audit(user["id"], "command.restart_stack", None, {"cmd_id": c.id})
+        self.db.add_event(mission_id=None, severity=1, category="command",
+                          message="yêu cầu khởi động lại stack Pi — liên kết sẽ mất 20–40 s")
+        task = asyncio.get_running_loop().create_task(self._send_tracked(c, cmd.RESTART_STACK))
+        self._cancelable[c.id] = task
+        return c.as_dict()
+
     def cancel_command(self, cmd_id: int, user: dict) -> bool:
         task = self._cancelable.pop(cmd_id, None)
         if task is None:
