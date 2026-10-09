@@ -7,7 +7,7 @@ import { hex8 } from "../../lib/units";
 import { useIsAdmin } from "../../store/auth";
 import { useLive } from "../../store/live";
 import { useSite } from "../../store/site";
-import { buildPadSheet } from "./padSheet";
+import { buildPadPdf, buildPadSheet } from "./padSheet";
 
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
@@ -86,6 +86,18 @@ export function TagsPage() {
     if (!tags.some((t) => t.enabled)) { setErr("Không có tag nào đang bật để in"); return; }
     setErr(null); setOk(null);
     window.open(URL.createObjectURL(new Blob([buildPadSheet(tags)], { type: "text/html" })), "_blank");
+  };
+
+  const downloadPadPdf = () => {
+    const { pdf, notes } = buildPadPdf(tags);
+    setOk(null);
+    if (!pdf) { setErr(["Không có bãi nào in được", ...notes].join(" — ")); return; }
+    setErr(notes.length ? notes.join(" — ") : null);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(pdf);
+    a.download = "bai_dap_A3.pdf";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
 
   const field = (t: Tag, k: keyof Tag, onChange: (t: Tag) => void, type: "num" | "text" = "num") => (
@@ -168,6 +180,7 @@ export function TagsPage() {
         </div>
         <div className="sync-row">
           <button onClick={printPads}>In bãi đáp (A3)</button>
+          <button onClick={downloadPadPdf}>Tải PDF bãi đáp (A3)</button>
           <span className="muted small">Mỗi bãi một trang A3 dọc: tag to + tag nhỏ (id + 10, 100 mm) phía TRÊN, tâm cách 210 mm — đúng mẫu Pi tự suy (giao ước 0.8). Chỉ tag 0–9 đang Bật.</span>
         </div>
       </div>
