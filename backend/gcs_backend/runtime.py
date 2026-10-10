@@ -451,7 +451,7 @@ class Runtime:
                                          priority=int(body.get("priority") or 100), waypoints=wps)
         self.db.audit(user["id"], "mission.create", str(mission["id"]), body)
         self.hub.push("mission_update", {"id": mission["id"], "state": mission["state"]})
-        return mission | {"warnings": planner.plan_warnings(wps, self.areas)}
+        return mission | {"warnings": planner.plan_warnings(wps, self.areas, self.tags)}
 
     async def upload(self, mission_id: int, user: dict) -> dict:
         mission = self.db.get_mission(mission_id)

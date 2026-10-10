@@ -9,6 +9,9 @@ import { useLive } from "../../store/live";
 import { useSite } from "../../store/site";
 import { Scene } from "../scene3d/Scene";
 
+// Trùng planner.MAX_TAG_VISIBLE_ALT_M phía backend: cao hơn thì camera không đọc được tag 25 cm.
+const MAX_TAG_VISIBLE_ALT_M = 2.5;
+
 /** Một điểm dừng = một mục kế hoạch: bay tới, tìm marker, hạ, làm action, cất cánh lại (3.2b). */
 type Stop = { tag_id: number; action: string };
 
@@ -104,6 +107,7 @@ export function MissionPage() {
           )}
           <div className="form-grid">
             <label>Cao hành trình (m)<input type="number" min={1} max={120} step={0.5} value={cruise} onChange={(e) => setCruise(+e.target.value)} /></label>
+            {cruise > MAX_TAG_VISIBLE_ALT_M && <div className="warn small">⚠ Cao hơn {MAX_TAG_VISIBLE_ALT_M} m camera không đọc được tag 25 cm — nên đặt ~2 m</div>}
             <label>Vận tốc tối đa (m/s)<input type="number" min={0.5} max={15} step={0.5} value={vel} onChange={(e) => setVel(+e.target.value)} /></label>
             <label>Ưu tiên (nhỏ = trước)<input type="number" value={priority} onChange={(e) => setPriority(+e.target.value)} /></label>
           </div>
@@ -115,7 +119,7 @@ export function MissionPage() {
         {sel && (
           <div className="panel">
             <h3>#{sel.id} {sel.plan_name} <span className={`pill ${sel.state}`}>{sel.state}</span></h3>
-            {sel.warnings?.map((w) => <div key={w} className="warn small">⚠ {w} (vùng bay chỉ cảnh báo, drone không cưỡng chế)</div>)}
+            {sel.warnings?.map((w) => <div key={w} className="warn small">⚠ {w} (chỉ cảnh báo, drone không cưỡng chế)</div>)}
             {sel.fail_reason && <div className="error small">{sel.fail_reason}</div>}
             {blocked && <div className="error small">Bản đồ tag lệch với drone — không tải lên / bắt đầu được.</div>}
             <table className="grid small">

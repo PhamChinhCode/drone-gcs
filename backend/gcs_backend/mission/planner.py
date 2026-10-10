@@ -20,6 +20,9 @@ from __future__ import annotations
 from ..sitedesign.geometry import point_in_polygon
 
 MAX_ITEMS = 16  # giao ước 3.2 — Pi trả ERR_COUNT nếu quá; GCS chặn sớm vì đây là lỗi soạn thảo
+# Cao hơn mức này camera (OV9281, tag 25 cm) không đọc được tag: bay thật 10-10 ở 5 m drone tìm
+# 20 s không thấy, hết lượt thử lại. Ở 2 m tag ~70 px, 5 m ~15 px (dưới ngưỡng apriltag).
+MAX_TAG_VISIBLE_ALT_M = 2.5
 
 
 class PlanError(ValueError):
@@ -87,9 +90,19 @@ def plan_pickup_dropoff(tags: list[dict], pickup_tag: int, dropoff_tag: int, *, 
                       cruise_alt_m=cruise_alt_m, max_vel_mps=max_vel_mps, accept_radius_m=accept_radius_m)
 
 
-def plan_warnings(wps: list[dict], areas: list[dict]) -> list[str]:
-    """Cảnh báo phía GCS (KHÔNG cưỡng chế — drone không biết vùng bay, giao ước 9.3)."""
+def plan_warnings(wps: list[dict], areas: list[dict], tags: list[dict] | None = None) -> list[str]:
+    """Cảnh báo phía GCS (KHÔNG cưỡng chế — drone không biết vùng bay, giao ước 9.3).
+
+    tags: để tính độ cao điểm so với mặt tag (cảnh báo camera không đọc được tag khi quá cao).
+    """
     out = []
+    tag_d = {t["tag_id"]: t.get("pos_d_m", 0.0) for t in tags or []}
+    for w in wps:
+        if w.get("tag_id") in tag_d:
+            alt = tag_d[w["tag_id"]] - w["pos_d_m"]
+            if alt > MAX_TAG_VISIBLE_ALT_M:
+                out.append(f"waypoint {w['seq']} (tag {w['tag_id']}) cao {alt:.1f} m > {MAX_TAG_VISIBLE_ALT_M} m — "
+                           "camera sẽ không đọc được tag, drone tìm không thấy rồi hết lượt thử lại")
     operating = [a["vertices"] for a in areas if a["kind"] == "operating" and a.get("enabled", True)]
     no_fly = [(a["name"], a["vertices"]) for a in areas if a["kind"] == "no_fly" and a.get("enabled", True)]
     for w in wps:

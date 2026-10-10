@@ -96,3 +96,13 @@ def test_plan_warns_crossing_no_fly():
     warn = planner.plan_warnings(wps, [area("operating", SQUARE),
                                        area("no_fly", [[2, 2], [2, 8], [8, 8], [8, 2]], "kho")])
     assert any("kho" in w for w in warn)
+
+
+def test_plan_warns_altitude_too_high_for_tag():
+    """Bay thật 10-10: cao 5 m camera không đọc được tag 25 cm. Cảnh báo, không chặn."""
+    tags = good_design()["tags"]
+    wps = planner.plan_stops(tags, [{"tag_id": 1}], cruise_alt_m=5, max_vel_mps=1.5, accept_radius_m=1.5)
+    warn = planner.plan_warnings(wps, [], tags)
+    assert sum("camera sẽ không đọc được tag" in w for w in warn) == len(wps)
+    ok = planner.plan_stops(tags, [{"tag_id": 1}], cruise_alt_m=2, max_vel_mps=1.5, accept_radius_m=1.5)
+    assert planner.plan_warnings(ok, [], tags) == []

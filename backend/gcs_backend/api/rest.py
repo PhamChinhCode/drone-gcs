@@ -314,7 +314,7 @@ def _mission_or_404(r: Runtime, mission_id: int) -> dict:
 @router.get("/missions/{mission_id}/preview")
 async def preview(mission_id: int, r: Runtime = Depends(rt), _: dict = Depends(current_user)):
     mi = _mission_or_404(r, mission_id)
-    return {"waypoints": mi["waypoints"], "warnings": plan_warnings(mi["waypoints"], r.areas)}
+    return {"waypoints": mi["waypoints"], "warnings": plan_warnings(mi["waypoints"], r.areas, r.tags)}
 
 
 @router.put("/missions/{mission_id}/priority")
