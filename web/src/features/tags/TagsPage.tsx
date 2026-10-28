@@ -95,7 +95,7 @@ export function TagsPage() {
     setErr(notes.length ? notes.join(" — ") : null);
     const a = document.createElement("a");
     a.href = URL.createObjectURL(pdf);
-    a.download = "bai_dap_A3.pdf";
+    a.download = "bai_dap.pdf";
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
@@ -179,9 +179,9 @@ export function TagsPage() {
           <span className="muted small">Mở trang HTML ở tab mới — in ở tỷ lệ 100%, không "Vừa trang". Chỉ in tag đang Bật.</span>
         </div>
         <div className="sync-row">
-          <button onClick={printPads}>In bãi đáp (A3)</button>
-          <button onClick={downloadPadPdf}>Tải PDF bãi đáp (A3)</button>
-          <span className="muted small">Mỗi bãi một trang A3 dọc, chỉ tag to. Tag nhỏ (id + 10, 100 mm) in riêng, dán trên nắp hộp hàng; tâm hộp cách tâm tag to 300 mm về phía DƯỚI (giao ước 0.8). Chỉ tag 0–9 đang Bật.</span>
+          <button onClick={printPads}>In bãi đáp</button>
+          <button onClick={downloadPadPdf}>Tải PDF bãi đáp</button>
+          <span className="muted small">Mỗi bãi một trang dọc (A3, tag to lớn thì A2): tag to + tag nhỏ (id + 10, 100 mm) phía TRÊN, tâm cách tâm tag to 250 mm. Tag hộp (id ≥ 20, 100 mm) in riêng, dán nắp hộp, đặt phía DƯỚI tag to. Chỉ tag 0–9 đang Bật.</span>
         </div>
       </div>
     </div>
