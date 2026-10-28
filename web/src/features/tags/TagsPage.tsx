@@ -49,7 +49,7 @@ ${warn}
 </body></html>`;
 }
 
-const EMPTY: Tag = { tag_id: 0, label: "", pos_n_m: 0, pos_e_m: 0, pos_d_m: 0, yaw_deg: 0, yaw_valid: false, tag_size_m: 0.3, kind: "pickup", landing_tol_m: 0.3, enabled: true };
+const EMPTY: Tag = { tag_id: 0, label: "", pos_n_m: 0, pos_e_m: 0, pos_d_m: 0, yaw_deg: 0, yaw_valid: false, tag_size_m: 0.25, kind: "pickup", landing_tol_m: 0.3, enabled: true };
 
 export function TagsPage() {
   const { tags, issues, load } = useSite();

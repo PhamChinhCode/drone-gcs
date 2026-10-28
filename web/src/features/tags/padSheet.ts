@@ -1,14 +1,15 @@
 // Tờ in BÃI ĐÁP dọc: tag to (tâm bãi) + tag nhỏ phía TRÊN, cùng chiều, đúng khoảng cách (user 2026-10-27,
 // quay lại mẫu 10-09). Mẫu tag nhỏ phải trùng mẫu Pi (giao ước GCS <-> Pi 0.8 mục 8.7, tags.yaml
-// pad_small_tag_*): id = id tag to + 10, cạnh 100 mm, tâm cách tâm tag to 250 mm về phía mép TRÊN. Đổi mẫu thì
+// pad_small_tag_*): id = id tag to + 10, cạnh 100 mm, tâm cách tâm tag to 210 mm về phía mép TRÊN. Đổi mẫu thì
 // sửa cả tags.yaml phía Pi, không thì Pi suy tâm bãi sai từ tag nhỏ.
 // Dải ID (apriltag.yaml phía Pi): < 20 = tag NEO vị trí (0–9 tag to, 10–19 tag nhỏ), >= 20 = tag HỘP HÀNG dán
 // trên nắp hộp, đặt phía DƯỚI tag to. Tờ bãi KHÔNG được có tag hộp.
-// Khổ giấy: A3 nếu vừa, không thì A2 (tag to 30 cm + viền rộng 375 mm, hơn khổ A3 297 mm).
+// Khổ giấy: A3 nếu KHỐI ĐEN vừa, không thì A2. Tag to 25 cm (user 10-28) vừa A3 nhưng viền trắng hai bên / dưới
+// hụt 1 ô -> cảnh báo đặt bãi trên nền sáng. Trùng tools/in_bai_a3.py phía Pi.
 import { TAG36H11_MAX_ID, tag36h11Grid } from "../../lib/apriltag36h11";
 import type { Tag } from "../../lib/types";
 
-const PAD_SMALL = { idOffset: 10, sizeMm: 100, forwardMm: 250 };
+const PAD_SMALL = { idOffset: 10, sizeMm: 100, forwardMm: 210 };
 const BOX_TAG = { idMin: 20, sizeMm: 100, backMm: 300 };
 // Khổ dọc (mm), nhỏ trước: chọn khổ nhỏ nhất vừa bãi.
 const PAGES = [{ name: "A3", w: 297, h: 420 }, { name: "A2", w: 420, h: 594 }];
@@ -51,23 +52,25 @@ function buildPad(t: Tag): Pad {
   const smallTop = PRINT_MARGIN + cellS;               // đủ viền trắng 1 ô phía trên tag nhỏ
   const bigCy = smallTop + s / 2 + F;
   const bigBottom = bigCy + S / 2;
-  const size = PAGES.find((p) => bigBottom + cellB <= p.h - PRINT_MARGIN && S + 2 * cellB <= p.w - 2 * PRINT_MARGIN);
+  const size = PAGES.find((p) => bigBottom <= p.h - PRINT_MARGIN && S <= p.w - 2 * PRINT_MARGIN);
   if (!size) return { error: `cạnh ${S.toFixed(0)} mm không vừa khổ ${PAGES[PAGES.length - 1].name} cùng tag nhỏ` };
   const cx = size.w / 2;
   const warn: string[] = [];
-  const bottom = size.h - bigBottom;
-  if (bottom < cellB) {
-    warn.push(`viền trắng dưới tag to chỉ còn ${bottom.toFixed(0)} mm (cần ≥ 1 ô = ${cellB.toFixed(0)} mm) — ` +
-      "đặt bãi trên nền trắng hoặc dán thêm giấy trắng phía dưới");
+  // Viền trắng thật = tới mép giấy (lề máy in vẫn là giấy trắng).
+  const bottom = size.h - bigBottom, side = (size.w - S) / 2;
+  if (Math.min(bottom, side) < cellB) {
+    warn.push(`viền trắng quanh tag to chỉ còn ${side.toFixed(0)} mm hai bên / ${bottom.toFixed(0)} mm dưới ` +
+      `(chuẩn 1 ô = ${cellB.toFixed(0)} mm) — đặt bãi trên nền sáng màu hoặc dán thêm giấy trắng quanh tờ`);
   }
   const small = t.tag_id + PAD_SMALL.idOffset;
   const smallCy = smallTop + s / 2;
   const textX = 8;                                      // bên trái tag nhỏ, ngoài viền trắng của nó
   const lines = [`▲ TRÊN = hướng bãi (khổ ${size.name})`, `Bãi: ${t.label} (${t.kind})`,
     `Tag to: id ${t.tag_id}, cạnh ${S.toFixed(0)} mm`, `Tag nhỏ: id ${small}, cạnh ${s} mm`, `Tâm nhỏ → tâm to: ${F} mm`,
-    `Hộp: tag id ≥ ${BOX_TAG.idMin} (${BOX_TAG.sizeMm} mm) trên nắp,`, `đặt phía DƯỚI, ~${BOX_TAG.backMm} mm từ tâm tag to`];
+    `Hộp: tag id ≥ ${BOX_TAG.idMin} (${BOX_TAG.sizeMm} mm) trên nắp,`, `đặt phía DƯỚI, ~${BOX_TAG.backMm} mm`, "từ tâm tag to"];
   const prims: Prim[] = [...tagCells(small, cx - s / 2, smallTop, s), ...tagCells(t.tag_id, cx - S / 2, bigCy - S / 2, S)];
-  lines.forEach((l, i) => prims.push({ k: "text", x: textX, y: smallCy - 21 + i * 7, size: 4.6, s: l }));
+  // Chữ 3,8 mm (~42 ký tự) vừa khoảng trái tag nhỏ trên khổ A3, không lấn viền trắng của nó.
+  lines.forEach((l, i) => prims.push({ k: "text", x: textX, y: smallTop + 4 + i * 6, size: 3.8, s: l }));
   // Mũi tên TRÊN và ô hiệu chỉnh 20 mm: bên phải tag nhỏ, trên viền trắng tag to.
   const arrowX = size.w - 25, arrowBot = bigCy - S / 2 - cellB - 4, arrowTop = smallTop;
   prims.push({ k: "line", x1: arrowX, y1: arrowBot, x2: arrowX, y2: arrowTop + 8, w: 1.2 },

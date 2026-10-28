@@ -147,7 +147,7 @@ class Database:
         for tag_id, label, n, e, kind in [(0, "Home", 0, 0, "home"), (1, "A", 18, 12, "pickup"),
                                           (2, "B", -10, 25, "dropoff"), (3, "C", 25, -15, "pickup"),
                                           (4, "D", -20, -18, "dropoff")]:
-            s.add(TagPoint(site_id=site_id, tag_id=tag_id, label=label, pos_n_m=n, pos_e_m=e, tag_size_m=0.30,
+            s.add(TagPoint(site_id=site_id, tag_id=tag_id, label=label, pos_n_m=n, pos_e_m=e, tag_size_m=0.25,
                            kind=kind, landing_tol_m=0.3))
         op = SiteArea(site_id=site_id, kind="operating", name="Vùng bay chính")
         op.vertices = [SiteAreaVertex(seq=i, pos_n_m=n, pos_e_m=e)
